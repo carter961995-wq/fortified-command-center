@@ -1,65 +1,58 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { COMPANY } from "@/lib/constants";
-import { Shield } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+  const err = searchParams.get("error");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [message, setMessage] = useState<string | null>(err === "forbidden" ? "Your account is not authorized for this dashboard." : null);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError(null);
-
+    setMessage(null);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
+    setLoading(false);
     if (error) {
-      setError(error.message);
-      setLoading(false);
+      setMessage(error.message);
       return;
     }
-
-    router.push("/");
+    const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    router.push(dest === "/" ? "/dashboard" : dest);
     router.refresh();
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-4">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gray-900">
-            <Shield className="h-8 w-8 text-white" />
-          </div>
-          <div>
-            <CardTitle className="text-2xl font-bold">{COMPANY.name}</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
-              Work Order Command Center
-            </p>
-          </div>
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-md border-border">
+        <CardHeader>
+          <CardTitle className="text-xl">Fortified Work Order Command Center</CardTitle>
+          <CardDescription>Internal sign-in for owner and admin roles.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@fortifiedfence.com"
+                autoComplete="email"
+                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                required
               />
             </div>
             <div className="space-y-2">
@@ -67,18 +60,15 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
+                autoComplete="current-password"
+                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
               />
             </div>
-            {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+            {message ? <p className="text-sm text-destructive">{message}</p> : null}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign In"}
+              {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </CardContent>

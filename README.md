@@ -1,90 +1,81 @@
 # Fortified Work Order Command Center
 
-Private internal admin dashboard for Fortified Fence & Weld to manage commercial work orders, customers, locations, subcontractors, quotes, invoices, payments, job costs, photos/documents, maintenance contracts, and reporting.
+Internal admin dashboard for **Fortified Fence & Weld**: commercial fence, gate, welding, security grille, bollard, and facilities maintenance work across multiple states. Built with **Next.js 16**, **TypeScript**, **Tailwind CSS**, **shadcn/ui (Base UI)**, and **Supabase** (PostgreSQL, Auth, Storage, Row Level Security).
 
-## Stack
+## Features (MVP)
 
-- Next.js App Router
-- React + TypeScript
-- Tailwind CSS
-- Supabase Auth, PostgreSQL, RLS, and Storage
-- Server-side branded invoice PDF generation with `pdf-lib`
+- **Authentication**: Supabase email/password; middleware protects app routes; staff access limited to `owner` and `admin` roles in `users_profile`.
+- **Dashboard**: Open work orders, billing pipeline counts, MTD revenue / gross profit / margin, recent WOs, scheduled jobs, invoices needing attention.
+- **CRUD**: Customers, locations, subcontractors, work orders (status, job costs, photos/documents via storage upload).
+- **Quotes & invoices**: Line items, tax, status workflows; create invoice from work order or approved quote.
+- **Payments**: Record payments; balances and invoice status recalculated automatically.
+- **PDF invoices**: Server-side generation with `@react-pdf/renderer`, uploaded to the `invoices` storage bucket.
+- **Maintenance contracts**: Create contracts, generate scheduled visits, link visits to work orders.
+- **Reports**: Rolling twelve-month revenue and P&amp;L rollups, open AR, subcontractor scorecard, job costs by sub.
+- **Settings**: Placeholders for Stripe and QuickBooks integration.
 
-## What is included
+## Prerequisites
 
-- Protected admin shell with `/login` and Supabase Auth middleware.
-- Core routes:
-  - `/dashboard`
-  - `/customers`, `/customers/new`, `/customers/[id]`
-  - `/locations`, `/locations/new`, `/locations/[id]`
-  - `/subcontractors`, `/subcontractors/new`, `/subcontractors/[id]`
-  - `/work-orders`, `/work-orders/new`, `/work-orders/[id]`
-  - `/quotes`, `/quotes/[id]`
-  - `/invoices`, `/invoices/[id]`
-  - `/maintenance-contracts`, `/maintenance-contracts/[id]`
-  - `/reports`
-  - `/settings`
-- Work order status lifecycle and automatic status timestamp behavior.
-- Job cost entry and work order gross profit / gross margin snapshot.
-- Invoice line items, payments, balance/status recalculation, overdue/paid/partial handling.
-- Branded invoice PDF at `/api/invoices/[id]/pdf`.
-- Supabase Storage upload UI for work order photos and documents.
-- Maintenance visits and linked work order creation.
-- Dashboard and reports for operational, revenue, profit, aging, and subcontractor views.
-- Supabase migration with tables, foreign keys, indexes, updated_at triggers, RLS policies, storage buckets, and business triggers.
+- Node.js 20+
+- A [Supabase](https://supabase.com/) project
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local` and fill in values:
+Copy `.env.example` to `.env.local` and set:
 
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
-```
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) key — used in browser and server with user session |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key — **server only**; used for privileged storage uploads (e.g. invoice PDFs) |
 
-`SUPABASE_SERVICE_ROLE_KEY` is server-only. Do not expose it to browser code or commit real secrets.
+Never expose the service role key to the client.
 
 ## Supabase setup
 
-1. Create a Supabase project.
-2. Apply the migration in `supabase/migrations/20260516021200_initial_schema.sql` using the Supabase SQL editor or CLI.
-3. Create an Auth user for the owner/admin.
-4. Insert that user's profile row:
+1. Create a project in the Supabase dashboard.
+2. Run SQL migrations (see below) in the SQL editor, or use the Supabase CLI linked to this repo.
+3. **Authentication**: Enable Email provider; create your first user under Authentication → Users.
+4. **Profiles**: After first login, ensure `users_profile` has `role` set to `owner` or `admin` for that user (the migration seeds triggers for new users defaulting to `admin`; adjust in SQL as needed for your first account).
 
-```sql
-insert into public.users_profile (auth_user_id, full_name, email, role)
-values ('<auth.users.id>', 'Owner Name', 'owner@example.com', 'owner');
+## Database migrations
+
+SQL lives in `supabase/migrations/`. Apply in order (e.g. copy `20250515000000_initial_schema.sql` into the Supabase SQL editor and execute), or:
+
+```bash
+# If using Supabase CLI and linked project
+supabase db push
 ```
 
-5. Optional: run `supabase/seed.sql` for demo customer/location/subcontractor records.
+The migration defines tables (`customers`, `locations`, `work_orders`, `quotes`, `invoices`, `payments`, `maintenance_contracts`, etc.), RLS policies (staff admin full access for MVP), storage buckets, seed data, and the `work_order_financials` view.
 
-## Run locally
+## Local development
 
 ```bash
 npm install
+cp .env.example .env.local
+# fill in Supabase keys
 npm run dev
 ```
 
-Quality checks:
+Open [http://localhost:3000](http://localhost:3000). Unauthenticated users are sent to `/login`.
+
+## Production build
 
 ```bash
-npm run lint
-npm run typecheck
 npm run build
+npm start
 ```
 
-## Database notes
+## What to build next
 
-- Financial records use restrictive foreign keys to avoid accidental destructive cascade deletes.
-- `work_orders` status timestamps are enforced both in server actions and database triggers.
-- `invoice_line_items` and `payments` recalculate invoice totals, amount paid, balance due, and paid/partial/overdue status.
-- RLS grants owner/admin/dispatcher staff access for the internal MVP.
-- Future-ready policies allow customers to select their records by email and subcontractors to select assigned work orders by email.
+- **Stripe**: Card/ACH capture and webhook reconciliation (hooks stubbed in Settings).
+- **QuickBooks**: Invoice and payment export (stub in Settings).
+- **Portals**: Subcontractor and customer portals with tightened RLS (schema is already role-oriented).
+- **Dispatcher role**: Route planning and assignment UI.
+- **Notifications**: Email/SMS on quote sent, invoice sent, overdue AR.
+- **Deeper reports**: Cash basis, job-type profitability, export to CSV.
 
-## Known limitations
+## License
 
-- Stripe and QuickBooks are intentionally not implemented yet.
-- Customer and subcontractor portals are intentionally not built; policies are prepared for later scoped access.
-- Generated Supabase types should be regenerated from the live project after the migration is applied.
-- File buckets are public for straightforward MVP document/photo access; change to signed URLs if stricter document privacy is required.
+Private / internal use for Fortified Fence & Weld.

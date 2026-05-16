@@ -1,105 +1,103 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import { usePathname } from "next/navigation";
+import { signOut } from "@/actions/auth";
 import {
-  LayoutDashboard,
-  Users,
-  MapPin,
-  HardHat,
+  Building2,
   ClipboardList,
+  FileSpreadsheet,
   FileText,
-  Receipt,
-  CreditCard,
-  DollarSign,
-  Wrench,
-  CalendarCheck,
-  BarChart3,
-  Settings,
+  LayoutDashboard,
   LogOut,
+  MapPin,
+  Settings,
   Shield,
+  Users,
+  Wrench,
 } from "lucide-react";
-import { COMPANY } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/locations", label: "Locations", icon: MapPin },
-  { href: "/subcontractors", label: "Subcontractors", icon: HardHat },
+const nav = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/work-orders", label: "Work Orders", icon: ClipboardList },
+  { href: "/customers", label: "Customers", icon: Building2 },
+  { href: "/locations", label: "Locations", icon: MapPin },
+  { href: "/subcontractors", label: "Subcontractors", icon: Users },
   { href: "/quotes", label: "Quotes", icon: FileText },
-  { href: "/invoices", label: "Invoices", icon: Receipt },
-  { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/job-costs", label: "Job Costs", icon: DollarSign },
+  { href: "/invoices", label: "Invoices", icon: FileSpreadsheet },
   { href: "/maintenance-contracts", label: "Maintenance", icon: Wrench },
-  { href: "/maintenance-visits", label: "Visits", icon: CalendarCheck },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
+  { href: "/reports", label: "Reports", icon: Shield },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({
+  profileName,
+  profileEmail,
+  forceVisible = false,
+}: {
+  profileName: string;
+  profileEmail: string;
+  /** When true, sidebar is always visible (e.g. mobile drawer). */
+  forceVisible?: boolean;
+}) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
 
   return (
-    <aside className="flex h-screen w-64 flex-col border-r bg-white">
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-gray-900">
-          <Shield className="h-5 w-5 text-white" />
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold leading-tight">{COMPANY.name}</p>
-          <p className="text-xs text-muted-foreground">Command Center</p>
+    <aside
+      className={cn(
+        "w-60 shrink-0 border-r border-sidebar-border bg-sidebar",
+        forceVisible ? "flex flex-col" : "hidden lg:flex lg:flex-col"
+      )}
+    >
+      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-primary">
+            Fortified Fence & Weld
+          </span>
+          <span className="text-sm font-semibold text-sidebar-foreground">Work Order Command</span>
         </div>
       </div>
-      <Separator />
-      <ScrollArea className="flex-1 px-3 py-3">
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) => {
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-gray-100 text-gray-900"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                )}
-              >
-                <item.icon className="h-4 w-4 shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </ScrollArea>
-      <Separator />
-      <div className="p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-gray-600"
-          onClick={handleSignOut}
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </Button>
+      <nav className="flex flex-1 flex-col gap-0.5 p-3">
+        {nav.map((item) => {
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+              )}
+            >
+              <Icon className="size-4 shrink-0 opacity-80" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="border-t border-sidebar-border p-3">
+        <div className="mb-2 truncate px-1 text-xs text-sidebar-foreground/70">
+          <div className="truncate font-medium text-sidebar-foreground">{profileName}</div>
+          <div className="truncate">{profileEmail}</div>
+        </div>
+        <Separator className="mb-2 bg-sidebar-border" />
+        <form action={signOut}>
+          <Button
+            type="submit"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
+          >
+            <LogOut className="size-4" />
+            Sign out
+          </Button>
+        </form>
       </div>
     </aside>
   );
