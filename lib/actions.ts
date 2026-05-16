@@ -17,8 +17,7 @@ async function requireSupabaseUser() {
 function normalizeArray(raw: FormDataEntryValue | null) {
   if (!raw) return null;
   return String(raw)
-    .split(/[,
-]/)
+    .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { addInvoiceLineItemAction, addJobCostAction, addMaintenanceVisitAction, addPaymentAction, addQuoteLineItemAction, advanceWorkOrderStatusAction, createRecordAction, createWorkOrderFromVisitAction, updateRecordAction } from "@/lib/actions";
-import { calculateProfit, displayValue, formatDate, money, nextWorkOrderStatus, percent, type PlainRow } from "@/lib/business";
+import { displayValue, formatDate, money, nextWorkOrderStatus, percent, type PlainRow } from "@/lib/business";
 import { fetchInvoiceRelated, fetchMaintenanceVisits, fetchModuleRecord, fetchModuleRows, fetchRelationOptions, fetchWorkOrderRelated, getSessionContext, moduleForSlug } from "@/lib/data";
 import type { ModuleDefinition, ModuleField } from "@/lib/schema";
 import { workOrderLifecycle } from "@/lib/schema";

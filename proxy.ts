@@ -4,7 +4,7 @@ import { getSupabaseEnv, isSupabaseConfigured } from "@/lib/env";
 
 const publicPaths = ["/login"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   if (!isSupabaseConfigured()) return NextResponse.next();
 
   let response = NextResponse.next({ request });

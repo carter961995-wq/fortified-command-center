@@ -1,5 +1,5 @@
 import { Card, ErrorNotice, PageHeader } from "@/components/ui";
-import { displayValue, money, percent, type PlainRow } from "@/lib/business";
+import { displayValue, money, percent } from "@/lib/business";
 import { fetchReports } from "@/lib/data";
 
 function monthKey(value: unknown) {

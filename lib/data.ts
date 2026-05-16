@@ -21,7 +21,7 @@ export async function fetchModuleRows(def: ModuleDefinition): Promise<QueryResul
   if (!supabase) return { data: [], error };
 
   const { data, error: queryError } = await supabase.from(def.table).select(def.select).order("created_at", { ascending: false }).limit(250);
-  return { data: (data ?? []) as PlainRow[], error: queryError?.message };
+  return { data: ((data ?? []) as unknown) as PlainRow[], error: queryError?.message };
 }
 
 export async function fetchModuleRecord(def: ModuleDefinition, id: string): Promise<QueryResult<PlainRow | null>> {
@@ -42,10 +42,10 @@ export async function fetchRelationOptions(fields: ModuleDefinition["fields"]) {
       const relation = field.relation!;
       const { data } = await supabase
         .from(relation.table)
-        .select(`${relation.value}, ${relation.label}`)
+        .select([relation.value, relation.label].join(","))
         .order(relation.orderBy ?? relation.label, { ascending: true })
         .limit(500);
-      const options = ((data ?? []) as PlainRow[]).map((row) => ({
+      const options = (((data ?? []) as unknown) as PlainRow[]).map((row) => ({
         value: String(row[relation.value]),
         label: String(row[relation.label] ?? row[relation.value])
       }));
