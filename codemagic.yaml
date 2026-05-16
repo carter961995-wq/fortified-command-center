@@ -1,0 +1,59 @@
+workflows:
+  web-app:
+    name: Fortified Command Center Web Build
+    instance_type: linux_x2
+    max_build_duration: 30
+
+    environment:
+      node: 22
+      vars:
+        NEXT_TELEMETRY_DISABLED: "1"
+        # Add the Supabase values from .env.example as secure Codemagic
+        # environment variables before running this workflow:
+        # NEXT_PUBLIC_SUPABASE_URL
+        # NEXT_PUBLIC_SUPABASE_ANON_KEY
+        # SUPABASE_SERVICE_ROLE_KEY
+
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+        - pattern: cursor/*
+          include: true
+          source: true
+
+    cache:
+      cache_paths:
+        - ~/.npm
+        - .next/cache
+
+    scripts:
+      - name: Install dependencies and build web app
+        script: |
+          set -euo pipefail
+
+          if [ ! -f package.json ]; then
+            echo "No package.json found in this checkout; nothing to build yet."
+            exit 0
+          fi
+
+          node --version
+          npm --version
+
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+          npm run build
+
+    artifacts:
+      - .next/**
+      - out/**
+      - build/**
+      - dist/**
