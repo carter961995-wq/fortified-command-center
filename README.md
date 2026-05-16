@@ -1,115 +1,90 @@
 # Fortified Work Order Command Center
 
-Private internal admin dashboard for **Fortified Fence & Weld** to manage commercial fence, gate, welding, security grille, bollard, facilities-maintenance, subcontractor dispatch, invoices, job costs, profit tracking, and recurring maintenance contracts across multiple states.
+Private internal admin dashboard for Fortified Fence & Weld to manage commercial work orders, customers, locations, subcontractors, quotes, invoices, payments, job costs, photos/documents, maintenance contracts, and reporting.
 
-## Tech Stack
+## Stack
 
-- **Next.js 16** (App Router)
-- **React 19** + **TypeScript**
-- **Tailwind CSS v4** + **shadcn/ui**
-- **Supabase** (PostgreSQL, Auth, RLS)
-- **@react-pdf/renderer** (server-side invoice PDF generation)
+- Next.js App Router
+- React + TypeScript
+- Tailwind CSS
+- Supabase Auth, PostgreSQL, RLS, and Storage
+- Server-side branded invoice PDF generation with `pdf-lib`
 
-## Getting Started
+## What is included
 
-### 1. Clone and install
+- Protected admin shell with `/login` and Supabase Auth middleware.
+- Core routes:
+  - `/dashboard`
+  - `/customers`, `/customers/new`, `/customers/[id]`
+  - `/locations`, `/locations/new`, `/locations/[id]`
+  - `/subcontractors`, `/subcontractors/new`, `/subcontractors/[id]`
+  - `/work-orders`, `/work-orders/new`, `/work-orders/[id]`
+  - `/quotes`, `/quotes/[id]`
+  - `/invoices`, `/invoices/[id]`
+  - `/maintenance-contracts`, `/maintenance-contracts/[id]`
+  - `/reports`
+  - `/settings`
+- Work order status lifecycle and automatic status timestamp behavior.
+- Job cost entry and work order gross profit / gross margin snapshot.
+- Invoice line items, payments, balance/status recalculation, overdue/paid/partial handling.
+- Branded invoice PDF at `/api/invoices/[id]/pdf`.
+- Supabase Storage upload UI for work order photos and documents.
+- Maintenance visits and linked work order creation.
+- Dashboard and reports for operational, revenue, profit, aging, and subcontractor views.
+- Supabase migration with tables, foreign keys, indexes, updated_at triggers, RLS policies, storage buckets, and business triggers.
+
+## Environment variables
+
+Copy `.env.example` to `.env.local` and fill in values:
 
 ```bash
-git clone <repo-url>
-cd fortified-command-center
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` is server-only. Do not expose it to browser code or commit real secrets.
+
+## Supabase setup
+
+1. Create a Supabase project.
+2. Apply the migration in `supabase/migrations/20260516021200_initial_schema.sql` using the Supabase SQL editor or CLI.
+3. Create an Auth user for the owner/admin.
+4. Insert that user's profile row:
+
+```sql
+insert into public.users_profile (auth_user_id, full_name, email, role)
+values ('<auth.users.id>', 'Owner Name', 'owner@example.com', 'owner');
+```
+
+5. Optional: run `supabase/seed.sql` for demo customer/location/subcontractor records.
+
+## Run locally
+
+```bash
 npm install
-```
-
-### 2. Set up Supabase
-
-1. Create a project at [supabase.com](https://supabase.com)
-2. Copy `.env.example` to `.env.local` and fill in your credentials:
-
-```bash
-cp .env.example .env.local
-```
-
-3. Run the migration in `supabase/migrations/001_initial_schema.sql` against your database (Supabase SQL Editor or CLI).
-
-4. Create a user in Supabase Auth (Dashboard > Authentication > Users).
-
-### 3. Run locally
-
-```bash
 npm run dev
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) and sign in.
+Quality checks:
 
-## Modules
-
-| Module | Route | Status |
-|---|---|---|
-| Dashboard | `/` | Metrics cards (live when connected) |
-| Customers | `/customers` | Full CRUD |
-| Locations | `/locations` | Full CRUD, linked to customers |
-| Subcontractors | `/subcontractors` | Full CRUD with compliance tracking |
-| Work Orders | `/work-orders` | Full CRUD, lifecycle management |
-| Job Costs | `/job-costs` | Add/track costs per work order |
-| Quotes | `/quotes` | Create from work orders, line items |
-| Invoices | `/invoices` | Create from work orders, line items |
-| Invoice PDF | `/invoices/[id]/pdf` | Fortified-branded PDF generation |
-| Payments | `/payments` | Record payments against invoices |
-| Maintenance Contracts | `/maintenance-contracts` | Recurring contract management |
-| Maintenance Visits | `/maintenance-visits` | Visit tracking |
-| Reports | `/reports` | Business performance overview |
-| Settings | `/settings` | System configuration |
-
-## Work Order Lifecycle
-
-```
-New → Needs Site Info → Waiting on Sub Quote → Quote Needed → Quote Sent →
-Approved → Scheduled → In Progress → Completed by Sub → Needs Review →
-Ready to Invoice → Invoiced → Paid → Closed
+```bash
+npm run lint
+npm run typecheck
+npm run build
 ```
 
-Additional statuses: `Callback/Warranty`, `Cancelled`
+## Database notes
 
-## Business Logic
+- Financial records use restrictive foreign keys to avoid accidental destructive cascade deletes.
+- `work_orders` status timestamps are enforced both in server actions and database triggers.
+- `invoice_line_items` and `payments` recalculate invoice totals, amount paid, balance due, and paid/partial/overdue status.
+- RLS grants owner/admin/dispatcher staff access for the internal MVP.
+- Future-ready policies allow customers to select their records by email and subcontractors to select assigned work orders by email.
 
-For every work order:
-- `gross_profit = invoice_total - total_job_costs`
-- `gross_margin = gross_profit / invoice_total × 100`
+## Known limitations
 
-Job cost categories: Subcontractor, Materials, Equipment, Travel, Permit, Other
-
-## Invoice PDF
-
-Server-side generated using `@react-pdf/renderer`. Features:
-- Fortified Fence & Weld branded header (dark bar)
-- Phone: (318) 446-2134
-- Large INVOICE label
-- Bill To / Job Location blocks
-- Invoice details grid (number, date, due date, terms)
-- Customer WO # / PO # if applicable
-- Service summary / work scope
-- Description/Qty/Price/Amount table
-- Subtotal, tax, total due
-- Payment terms (default Net 14)
-- Notes section
-- Professional footer with "Thank you for your business. Page 1"
-
-## Database
-
-Full schema in `supabase/migrations/001_initial_schema.sql`. Tables:
-- `customers`, `locations`, `subcontractors`
-- `work_orders`, `job_costs`
-- `quotes`, `quote_items`
-- `invoices`, `invoice_items`
-- `payments`
-- `maintenance_contracts`, `maintenance_visits`
-- `documents`
-
-All tables have RLS enabled with admin-only policies. Auto-updating `updated_at` triggers on all mutable tables.
-
-## Future
-
-- Stripe integration (payment processing)
-- QuickBooks sync (accounting)
-- Supabase Storage (photo/document uploads)
-- Customer/subcontractor portals
+- Stripe and QuickBooks are intentionally not implemented yet.
+- Customer and subcontractor portals are intentionally not built; policies are prepared for later scoped access.
+- Generated Supabase types should be regenerated from the live project after the migration is applied.
+- File buckets are public for straightforward MVP document/photo access; change to signed URLs if stricter document privacy is required.
