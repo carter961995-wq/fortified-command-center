@@ -73,15 +73,16 @@ function normalizeRecommendations(payload: unknown): AiSourcingRecommendation[] 
         ? root.results
         : [];
 
-  return items
-    .map((item, index) => {
+  const recommendations: AiSourcingRecommendation[] = [];
+
+  items.forEach((item, index) => {
       const record = item as Record<string, unknown>;
       const companyName =
         asString(record.companyName) ||
         asString(record.company_name) ||
         asString(record.name);
 
-      if (!companyName) return null;
+      if (!companyName) return;
 
       const skills = Array.isArray(record.skills)
         ? record.skills.map(asString).filter(Boolean)
@@ -92,7 +93,7 @@ function normalizeRecommendations(payload: unknown): AiSourcingRecommendation[] 
               .filter(Boolean)
           : undefined;
 
-      return {
+      recommendations.push({
         id: asString(record.id) || `ai-rec-${index + 1}`,
         companyName,
         phone:
@@ -121,10 +122,10 @@ function normalizeRecommendations(payload: unknown): AiSourcingRecommendation[] 
           asString(record.confidence).toLowerCase() === "low"
             ? (asString(record.confidence).toLowerCase() as "high" | "medium" | "low")
             : "medium",
-      } satisfies AiSourcingRecommendation;
-    })
-    .filter((item): item is AiSourcingRecommendation => Boolean(item))
-    .slice(0, 6);
+      });
+    });
+
+  return recommendations.slice(0, 6);
 }
 
 function buildPrompt(body: SourceSubcontractorsRequest) {
