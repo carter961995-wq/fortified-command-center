@@ -48,3 +48,22 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@layer components {
+  .leaflet-container {
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .leaflet-control-attribution {
+    @apply rounded-tl-lg bg-slate-950/80 text-[10px] text-slate-300;
+  }
+
+  .subcontractor-map-popup .leaflet-popup-content-wrapper,
+  .subcontractor-map-popup .leaflet-popup-tip {
+    @apply bg-white text-slate-950 shadow-xl;
+  }
+
+  .subcontractor-map-popup .leaflet-popup-content {
+    @apply m-3;
+  }
+}

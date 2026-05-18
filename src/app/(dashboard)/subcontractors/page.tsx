@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckCircle, XCircle } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Map } from "lucide-react";
 import { getSubcontractors } from "./actions";
 
 function statusVariant(status: string) {
@@ -39,12 +39,20 @@ export default async function SubcontractorsPage() {
         title="Subcontractors"
         description="Manage your subcontractor network"
         actions={
-          <Button asChild>
-            <Link href="/subcontractors/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Subcontractor
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/subcontractors/command-map">
+                <Map className="mr-2 h-4 w-4" />
+                Command Map
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/subcontractors/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Subcontractor
+              </Link>
+            </Button>
+          </div>
         }
       />
 

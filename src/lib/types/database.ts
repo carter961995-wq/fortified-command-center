@@ -92,6 +92,10 @@ export interface Subcontractor {
   owner_name: string;
   phone: string;
   email: string | null;
+  city: string | null;
+  state: string | null;
+  service_latitude: number | null;
+  service_longitude: number | null;
   service_states: string[];
   service_radius_miles: number | null;
   trades: TradeType[];
@@ -103,6 +107,12 @@ export interface Subcontractor {
   dedicated_region: string | null;
   labor_rate_per_hour: number | null;
   trip_charge: number | null;
+  active_cities: string[];
+  pricing_tier: string | null;
+  waits_for_corporate_payout: boolean;
+  historical_performance_log: string | null;
+  source_website: string | null;
+  archived_at: string | null;
   jobs_completed: number;
   quality_score: number | null;
   response_score: number | null;
