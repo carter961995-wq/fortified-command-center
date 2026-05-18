@@ -1,17 +1,11 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { requireStaff } from "@/lib/require-staff";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { WorkOrderStatusBadge, InvoiceStatusBadge } from "@/components/status-badges";
+  PremiumDashboard,
+  PremiumDashboardFallback,
+  type DashboardInvoice,
+  type DashboardWorkOrder,
+} from "@/components/premium-dashboard";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 
 export const metadata = {
@@ -30,6 +24,9 @@ async function DashboardContent() {
     needQuotes,
     waitSub,
     readyInv,
+    urgentWo,
+    productionWo,
+    callbackWo,
     unpaidInv,
     overdueInv,
     monthInvoices,
@@ -56,6 +53,20 @@ async function DashboardContent() {
       .from("work_orders")
       .select("id", { count: "exact", head: true })
       .eq("status", "Ready to Invoice"),
+    supabase
+      .from("work_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("priority", "Urgent")
+      .not("status", "eq", "Closed")
+      .not("status", "eq", "Cancelled"),
+    supabase
+      .from("work_orders")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["Approved", "Scheduled", "In Progress", "Completed by Sub", "Needs Review"]),
+    supabase
+      .from("work_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "Callback/Warranty"),
     supabase
       .from("invoices")
       .select("id", { count: "exact", head: true })
@@ -112,13 +123,15 @@ async function DashboardContent() {
 
   let revenueMonth = 0;
   let grossProfitMonth = 0;
+  for (const inv of monthInvoices.data ?? []) {
+    revenueMonth += Number(inv.total_amount ?? 0);
+  }
+
   if (woIds.length) {
     const { data: fin } = await supabase.from("work_order_financials").select("*").in("work_order_id", woIds);
     const finByWo = new Map((fin ?? []).map((f) => [f.work_order_id, f]));
     const profitCounted = new Set<string>();
     for (const inv of monthInvoices.data ?? []) {
-      if (inv.status === "void") continue;
-      revenueMonth += Number(inv.total_amount ?? 0);
       const woid = inv.work_order_id as string | null;
       if (!woid || profitCounted.has(woid)) continue;
       profitCounted.add(woid);
@@ -129,197 +142,35 @@ async function DashboardContent() {
   const margin =
     revenueMonth > 0 ? Math.round((grossProfitMonth / revenueMonth) * 10000) / 100 : 0;
 
-  const stat = (label: string, value: string | number, hint?: string) => (
-    <Card size="sm">
-      <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
-        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-      </CardHeader>
-    </Card>
-  );
-
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Operational snapshot for commercial fence, gate, and welding work across your network.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {stat("Open work orders", openWo.count ?? 0, "Excludes closed / cancelled")}
-        {stat("Jobs needing quotes", needQuotes.count ?? 0, "Quote needed or site info")}
-        {stat("Waiting on sub quote", waitSub.count ?? 0)}
-        {stat("Ready to invoice", readyInv.count ?? 0)}
-        {stat("Unpaid invoices", unpaidInv.count ?? 0, "Sent, partial, overdue")}
-        {stat("Overdue / past due", overdueInv.count ?? 0)}
-        {stat("Revenue (MTD)", formatCurrency(revenueMonth), `${monthStart} – ${monthEnd}`)}
-        {stat("Gross profit (MTD)", formatCurrency(grossProfitMonth))}
-        {stat("Gross margin (MTD)", `${margin}%`, "Based on linked work order P&L")}
-        {stat("Active subcontractors", activeSubs.count ?? 0)}
-        {stat("Active maintenance", activeContracts.count ?? 0)}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent work orders</CardTitle>
-            <CardDescription>Newest activity across the network.</CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>WO</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(recentWo.data ?? []).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      No work orders yet.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  (recentWo.data ?? []).map((row) => {
-                    const custRaw = row.customers as { company_name: string } | { company_name: string }[] | null;
-                    const c = Array.isArray(custRaw) ? custRaw[0] : custRaw;
-                    const locRaw = row.locations as { city: string; state: string } | { city: string; state: string }[] | null;
-                    const l = Array.isArray(locRaw) ? locRaw[0] : locRaw;
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell>
-                          <Link href={`/work-orders/${row.id}`} className="font-medium text-primary hover:underline">
-                            {row.work_order_number}
-                          </Link>
-                          <div className="text-xs text-muted-foreground">{row.title}</div>
-                        </TableCell>
-                        <TableCell>{c?.company_name ?? "—"}</TableCell>
-                        <TableCell>
-                          {l ? `${l.city}, ${l.state}` : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <WorkOrderStatusBadge status={row.status} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Upcoming scheduled jobs</CardTitle>
-            <CardDescription>Next field dates on the calendar.</CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>WO</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(scheduledWo.data ?? []).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      No upcoming schedules.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  (scheduledWo.data ?? []).map((row) => {
-                    const custRaw = row.customers as { company_name: string } | { company_name: string }[] | null;
-                    const c = Array.isArray(custRaw) ? custRaw[0] : custRaw;
-                    return (
-                      <TableRow key={row.id}>
-                        <TableCell className="whitespace-nowrap">
-                          {row.scheduled_date ? formatDate(row.scheduled_date) : "—"}
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/work-orders/${row.id}`} className="font-medium text-primary hover:underline">
-                            {row.work_order_number}
-                          </Link>
-                        </TableCell>
-                        <TableCell>{c?.company_name ?? "—"}</TableCell>
-                        <TableCell>
-                          <WorkOrderStatusBadge status={row.status} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Invoices needing attention</CardTitle>
-          <CardDescription>Overdue, partial payments, or past due while still open.</CardDescription>
-        </CardHeader>
-        <CardContent className="px-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Balance</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(attentionInvoices.data ?? []).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No invoices in follow-up status.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                (attentionInvoices.data ?? []).map((row) => {
-                  const custRaw = row.customers as { company_name: string } | { company_name: string }[] | null;
-                  const cust = Array.isArray(custRaw) ? custRaw[0] : custRaw;
-                  return (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <Link href={`/invoices/${row.id}`} className="font-medium text-primary hover:underline">
-                          {row.invoice_number}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{cust?.company_name ?? "—"}</TableCell>
-                      <TableCell>{formatCurrency(row.balance_due)}</TableCell>
-                      <TableCell>{row.due_date ? formatDate(row.due_date) : "—"}</TableCell>
-                      <TableCell>
-                        <InvoiceStatusBadge status={row.status} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+    <PremiumDashboard
+      metrics={{
+        openWorkOrders: openWo.count ?? 0,
+        needQuotes: needQuotes.count ?? 0,
+        waitingOnSubQuote: waitSub.count ?? 0,
+        readyToInvoice: readyInv.count ?? 0,
+        unpaidInvoices: unpaidInv.count ?? 0,
+        overdueInvoices: overdueInv.count ?? 0,
+        revenueMonth,
+        grossProfitMonth,
+        margin,
+        activeSubcontractors: activeSubs.count ?? 0,
+        activeMaintenance: activeContracts.count ?? 0,
+        urgentWorkOrders: urgentWo.count ?? 0,
+        productionWorkOrders: productionWo.count ?? 0,
+        callbackWorkOrders: callbackWo.count ?? 0,
+        monthLabel: `${format(startOfMonth(new Date()), "MMM d")} - ${format(endOfMonth(new Date()), "MMM d")}`,
+      }}
+      recentWorkOrders={(recentWo.data ?? []) as DashboardWorkOrder[]}
+      scheduledWorkOrders={(scheduledWo.data ?? []) as DashboardWorkOrder[]}
+      attentionInvoices={(attentionInvoices.data ?? []) as DashboardInvoice[]}
+    />
   );
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-muted-foreground">Loading dashboard…</div>}>
+    <Suspense fallback={<PremiumDashboardFallback />}>
       <DashboardContent />
     </Suspense>
   );
