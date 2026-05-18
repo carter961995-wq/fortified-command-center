@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Card } from "@/components/ui";
-import { displayValue, type PlainRow } from "@/lib/business";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { displayValue, type PlainRow } from "../lib/business";
+import { createSupabaseBrowserClient } from "../lib/supabase/client";
+import { Badge, Card } from "./ui";
 
 const photoTypes = ["before", "during", "after", "receipt", "damage", "other"];
 const documentTypes = ["quote", "invoice", "receipt", "completion_form", "contract", "other"];

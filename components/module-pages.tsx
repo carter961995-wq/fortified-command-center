@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { addInvoiceLineItemAction, addJobCostAction, addMaintenanceVisitAction, addPaymentAction, addQuoteLineItemAction, advanceWorkOrderStatusAction, createRecordAction, createWorkOrderFromVisitAction, updateRecordAction } from "@/lib/actions";
-import { displayValue, formatDate, money, nextWorkOrderStatus, percent, type PlainRow } from "@/lib/business";
-import { fetchInvoiceRelated, fetchMaintenanceVisits, fetchModuleRecord, fetchModuleRows, fetchRelationOptions, fetchWorkOrderRelated, getSessionContext, moduleForSlug } from "@/lib/data";
-import type { ModuleDefinition, ModuleField } from "@/lib/schema";
-import { workOrderLifecycle } from "@/lib/schema";
-import { Badge, ButtonLink, Card, EmptyState, ErrorNotice, KeyValue, PageHeader, SecondaryButton, SubmitButton } from "@/components/ui";
-import { DataTable } from "@/components/data-table";
-import { WorkOrderFiles } from "@/components/work-order-files";
+import { addInvoiceLineItemAction, addJobCostAction, addMaintenanceVisitAction, addPaymentAction, addQuoteLineItemAction, advanceWorkOrderStatusAction, createRecordAction, createWorkOrderFromVisitAction, updateRecordAction } from "../lib/actions";
+import { displayValue, formatDate, money, nextWorkOrderStatus, percent, type PlainRow } from "../lib/business";
+import { fetchInvoiceRelated, fetchMaintenanceVisits, fetchModuleRecord, fetchModuleRows, fetchRelationOptions, fetchWorkOrderRelated, getSessionContext, moduleForSlug } from "../lib/data";
+import type { ModuleDefinition, ModuleField } from "../lib/schema";
+import { workOrderLifecycle } from "../lib/schema";
+import { DataTable } from "./data-table";
+import { Badge, ButtonLink, Card, EmptyState, ErrorNotice, KeyValue, PageHeader, SecondaryButton, SubmitButton } from "./ui";
+import { WorkOrderFiles } from "./work-order-files";
 
 function fieldValue(record: PlainRow | null | undefined, field: ModuleField) {
   const value = record?.[field.name];

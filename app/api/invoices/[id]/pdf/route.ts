@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { money, type PlainRow } from "@/lib/business";
+import { money, type PlainRow } from "../../../../../lib/business";
+import { createSupabaseServerClient } from "../../../../../lib/supabase/server";
 
 function nested(row: PlainRow, key: string) {
   const value = row[key];

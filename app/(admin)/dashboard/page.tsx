@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Card, ErrorNotice, KeyValue, PageHeader, Badge } from "@/components/ui";
-import { fetchDashboardMetrics } from "@/lib/data";
-import { displayValue, formatDate, money, percent, type PlainRow } from "@/lib/business";
+import { Card, ErrorNotice, KeyValue, PageHeader, Badge } from "../../../components/ui";
+import { displayValue, formatDate, money, percent, type PlainRow } from "../../../lib/business";
+import { fetchDashboardMetrics } from "../../../lib/data";
 
 function WorkOrderList({ title, rows }: { title: string; rows: PlainRow[] }) {
   return (
