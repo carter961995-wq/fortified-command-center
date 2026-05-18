@@ -1,6 +1,6 @@
-import { Card, ErrorNotice, PageHeader } from "@/components/ui";
-import { displayValue, money, percent } from "@/lib/business";
-import { fetchReports } from "@/lib/data";
+import { Card, ErrorNotice, PageHeader } from "../../../components/ui";
+import { displayValue, money, percent } from "../../../lib/business";
+import { fetchReports } from "../../../lib/data";
 
 function monthKey(value: unknown) {
   const date = value ? new Date(String(value)) : null;

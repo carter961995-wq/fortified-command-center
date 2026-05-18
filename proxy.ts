@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { getSupabaseEnv, isSupabaseConfigured } from "@/lib/env";
+import { getSupabaseEnv, isSupabaseConfigured } from "./lib/env";
 
 const publicPaths = ["/login"];
 

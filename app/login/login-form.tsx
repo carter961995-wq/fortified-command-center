@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseBrowserClient } from "../../lib/supabase/client";
 
 export function LoginForm({ configured }: { configured: boolean }) {
   const [email, setEmail] = useState("");

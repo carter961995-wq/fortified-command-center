@@ -1,5 +1,5 @@
-import { Card, PageHeader } from "@/components/ui";
-import { isSupabaseConfigured } from "@/lib/env";
+import { Card, PageHeader } from "../../../components/ui";
+import { isSupabaseConfigured } from "../../../lib/env";
 
 export default function SettingsPage() {
   return (

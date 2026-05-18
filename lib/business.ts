@@ -1,4 +1,4 @@
-import { workOrderLifecycle } from "@/lib/schema";
+import { workOrderLifecycle } from "./schema";
 
 export type PlainRow = Record<string, unknown>;
 

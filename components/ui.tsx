@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { statusTone } from "@/lib/business";
+import { statusTone } from "../lib/business";
 
 export function PageHeader({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
   return (

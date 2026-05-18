@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { invoiceStatusFromBalance, statusTimestampUpdates, type PlainRow } from "@/lib/business";
-import { moduleMap, type ModuleDefinition, type ModuleField } from "@/lib/schema";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { invoiceStatusFromBalance, statusTimestampUpdates, type PlainRow } from "./business";
+import { moduleMap, type ModuleDefinition, type ModuleField } from "./schema";
+import { createSupabaseServerClient } from "./supabase/server";
 
 async function requireSupabaseUser() {
   const supabase = await createSupabaseServerClient();

@@ -1,5 +1,5 @@
 import { LoginForm } from "./login-form";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured } from "../../lib/env";
 
 export default function LoginPage() {
   const configured = isSupabaseConfigured();

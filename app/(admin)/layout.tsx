@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { AdminShell } from "@/components/admin-shell";
-import { isSupabaseConfigured } from "@/lib/env";
-import { getSessionContext } from "@/lib/data";
+import { AdminShell } from "../../components/admin-shell";
+import { getSessionContext } from "../../lib/data";
+import { isSupabaseConfigured } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
 

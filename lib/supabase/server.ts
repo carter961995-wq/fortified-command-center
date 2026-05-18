@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { getSupabaseEnv, isSupabaseConfigured } from "@/lib/env";
+import { getSupabaseEnv, isSupabaseConfigured } from "../env";
 
 export async function createSupabaseServerClient() {
   if (!isSupabaseConfigured()) return null;

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { navItems } from "@/lib/schema";
-import { signOutAction } from "@/lib/actions";
-import type { PlainRow } from "@/lib/business";
+import { signOutAction } from "../lib/actions";
+import type { PlainRow } from "../lib/business";
+import { navItems } from "../lib/schema";
 
 export function AdminShell({ children, profile, envWarning }: { children: React.ReactNode; profile?: PlainRow | null; envWarning?: string }) {
   return (

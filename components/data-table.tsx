@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui";
-import { displayValue, formatDate, money, percent, type PlainRow } from "@/lib/business";
-import type { ListColumn } from "@/lib/schema";
+import { displayValue, formatDate, money, percent, type PlainRow } from "../lib/business";
+import type { ListColumn } from "../lib/schema";
+import { Badge } from "./ui";
 
 function formatCell(row: PlainRow, column: ListColumn) {
   const value = displayValue(row, column.key);

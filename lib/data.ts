@@ -1,6 +1,6 @@
-import { moduleMap, modules, type ModuleDefinition } from "@/lib/schema";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { calculateProfit, type PlainRow } from "@/lib/business";
+import { calculateProfit, type PlainRow } from "./business";
+import { moduleMap, modules, type ModuleDefinition } from "./schema";
+import { createSupabaseServerClient } from "./supabase/server";
 
 export type QueryResult<T> = { data: T; error?: string };
 
