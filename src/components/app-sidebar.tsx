@@ -34,12 +34,12 @@ const nav = [
 ];
 
 export function AppSidebar({
-  profileName,
-  profileEmail,
+  profileName = "Admin",
+  profileEmail = "",
   forceVisible = false,
 }: {
-  profileName: string;
-  profileEmail: string;
+  profileName?: string;
+  profileEmail?: string;
   /** When true, sidebar is always visible (e.g. mobile drawer). */
   forceVisible?: boolean;
 }) {
