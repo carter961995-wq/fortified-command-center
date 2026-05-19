@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { isDemoMode } from "@/lib/demo-mode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next");
   const err = searchParams.get("error");
+  const demoMode = isDemoMode();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,6 +23,13 @@ export default function LoginPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    if (demoMode) {
+      router.push(dest === "/" ? "/dashboard" : dest);
+      router.refresh();
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
     const supabase = createClient();
@@ -30,7 +39,6 @@ export default function LoginPage() {
       setMessage(error.message);
       return;
     }
-    const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
     router.push(dest === "/" ? "/dashboard" : dest);
     router.refresh();
   }
@@ -40,35 +48,45 @@ export default function LoginPage() {
       <Card className="w-full max-w-md border-border">
         <CardHeader>
           <CardTitle className="text-xl">Fortified Work Order Command Center</CardTitle>
-          <CardDescription>Internal sign-in for owner and admin roles.</CardDescription>
+          <CardDescription>
+            {demoMode ? "Local demo mode is enabled. No Supabase account is required." : "Internal sign-in for owner and admin roles."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            {demoMode ? (
+              <p className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+                Demo data is loaded in memory and resets when the dev server restarts.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
             {message ? <p className="text-sm text-destructive">{message}</p> : null}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
+              {demoMode ? "Open demo dashboard" : loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
         </CardContent>
