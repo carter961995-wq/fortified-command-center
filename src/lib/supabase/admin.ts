@@ -1,11 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createDemoClient } from "@/lib/demo-client";
 import { isDemoMode } from "@/lib/demo-mode";
 
 /** Server-only: PDF uploads and privileged operations. Never import in client components. */
-export function createAdminClient() {
+export function createAdminClient(): SupabaseClient {
   if (isDemoMode()) {
-    return createDemoClient() as any;
+    return createDemoClient() as unknown as SupabaseClient;
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,5 +16,5 @@ export function createAdminClient() {
   }
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-  });
+  }) as SupabaseClient;
 }

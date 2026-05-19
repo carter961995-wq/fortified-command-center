@@ -1,9 +1,11 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
-import { getSupabaseEnv, isSupabaseConfigured } from "../env";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createDemoClient } from "../../src/lib/demo-client";
+import { getSupabaseEnv, isDemoMode, isSupabaseConfigured } from "../env";
 
-export async function createSupabaseServerClient() {
+export async function createSupabaseServerClient(): Promise<SupabaseClient | null> {
+  if (isDemoMode()) return createDemoClient() as unknown as SupabaseClient;
   if (!isSupabaseConfigured()) return null;
   const { url, anonKey } = getSupabaseEnv();
   const cookieStore = await cookies();
@@ -21,13 +23,14 @@ export async function createSupabaseServerClient() {
         }
       }
     }
-  });
+  }) as SupabaseClient;
 }
 
-export function createSupabaseServiceClient() {
+export function createSupabaseServiceClient(): SupabaseClient | null {
+  if (isDemoMode()) return createDemoClient() as unknown as SupabaseClient;
   const { url, serviceRoleKey } = getSupabaseEnv();
   if (!url || !serviceRoleKey) return null;
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
-  });
+  }) as SupabaseClient;
 }

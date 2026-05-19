@@ -276,6 +276,7 @@ const demoDb = {
       customer_wo_number: "BRG-44102",
       purchase_order_number: "PO-10083",
       nte_amount: 3500,
+      not_to_exceed_amount: 3500,
       requested_date: "2026-05-13",
       due_date: "2026-05-22",
       scheduled_date: "2026-05-20",
@@ -303,6 +304,7 @@ const demoDb = {
       customer_wo_number: "GCW-7781",
       purchase_order_number: "PO-55318",
       nte_amount: 7800,
+      not_to_exceed_amount: 7800,
       requested_date: "2026-05-01",
       due_date: "2026-05-17",
       scheduled_date: "2026-05-15",
@@ -330,6 +332,7 @@ const demoDb = {
       customer_wo_number: "BRG-44177",
       purchase_order_number: null,
       nte_amount: 0,
+      not_to_exceed_amount: 0,
       requested_date: "2026-05-18",
       due_date: "2026-05-25",
       scheduled_date: null,
@@ -357,6 +360,7 @@ const demoDb = {
       customer_wo_number: null,
       purchase_order_number: null,
       nte_amount: 1200,
+      not_to_exceed_amount: 1200,
       requested_date: "2026-05-16",
       due_date: "2026-05-21",
       scheduled_date: "2026-05-21",
@@ -840,7 +844,7 @@ function physicalRows(table: DemoTable): DemoRow[] {
 }
 
 function normalizeInsertedRow(table: DemoTable, value: DemoRow) {
-  const row = {
+  const row: DemoRow = {
     id: value.id ?? crypto.randomUUID(),
     created_at: value.created_at ?? new Date().toISOString(),
     updated_at: value.updated_at ?? new Date().toISOString(),
@@ -860,6 +864,8 @@ function normalizeInsertedRow(table: DemoTable, value: DemoRow) {
 }
 
 function matchesFilter(row: DemoRow, filter: Filter) {
+  if (filter.column.includes(".")) return true;
+
   const value = row[filter.column];
   switch (filter.op) {
     case "eq":

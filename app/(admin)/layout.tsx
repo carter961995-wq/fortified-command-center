@@ -1,11 +1,23 @@
 import { redirect } from "next/navigation";
 import { AdminShell } from "../../components/admin-shell";
 import { getSessionContext } from "../../lib/data";
-import { isSupabaseConfigured } from "../../lib/env";
+import { isDemoMode, isSupabaseConfigured } from "../../lib/env";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  if (isDemoMode()) {
+    const { profile } = await getSessionContext();
+    return (
+      <AdminShell
+        profile={profile}
+        envWarning="Demo mode: using seeded in-memory data. Restarting the dev server resets changes."
+      >
+        {children}
+      </AdminShell>
+    );
+  }
+
   if (!isSupabaseConfigured()) {
     return <AdminShell envWarning="Supabase is not configured. Add environment variables and run the migration before using live data.">{children}</AdminShell>;
   }

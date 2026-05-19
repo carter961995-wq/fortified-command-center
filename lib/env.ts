@@ -13,5 +13,18 @@ export function getSupabaseEnv() {
 
 export function isSupabaseConfigured() {
   const { url, anonKey } = getSupabaseEnv();
-  return Boolean(url && anonKey && !url.includes("your-project-ref") && !anonKey.includes("your-supabase"));
+  return Boolean(
+    url &&
+      anonKey &&
+      !url.includes("your-project") &&
+      !url.includes("your-project-ref") &&
+      !anonKey.includes("your-anon-key") &&
+      !anonKey.includes("your-supabase")
+  );
+}
+
+export function isDemoMode() {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "false") return false;
+  if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") return true;
+  return !isSupabaseConfigured();
 }
