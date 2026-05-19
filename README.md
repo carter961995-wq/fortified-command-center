@@ -17,14 +17,31 @@ Internal admin dashboard for **Fortified Fence & Weld**: commercial fence, gate,
 ## Prerequisites
 
 - Node.js 20+
-- A [Supabase](https://supabase.com/) project
+- A [Supabase](https://supabase.com/) project only if you want persistent production-style data
+
+## Download and run locally
+
+For a local demo with seeded in-memory data, no Supabase setup is required:
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The app automatically uses demo mode when Supabase
+environment variables are missing or still set to the placeholder values from `.env.example`.
+
+Demo mode includes sample customers, locations, subcontractors, work orders, quotes, invoices, payments,
+maintenance contracts, and reports. Changes are stored in memory and reset when the dev server restarts.
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local` and set:
+For real persisted data, copy `.env.example` to `.env.local`, replace the placeholders with real Supabase
+values, and set `NEXT_PUBLIC_DEMO_MODE=false` if you want to force Supabase mode:
 
 | Variable | Purpose |
 |----------|---------|
+| `NEXT_PUBLIC_DEMO_MODE` | Optional. `true` forces demo mode; `false` forces Supabase mode |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) key — used in browser and server with user session |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key — **server only**; used for privileged storage uploads (e.g. invoice PDFs) |
@@ -53,12 +70,11 @@ The migration defines tables (`customers`, `locations`, `work_orders`, `quotes`,
 
 ```bash
 npm install
-cp .env.example .env.local
-# fill in Supabase keys
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Unauthenticated users are sent to `/login`.
+Open [http://localhost:3000](http://localhost:3000). Without Supabase keys, you are taken directly into
+the demo dashboard. With real Supabase keys, unauthenticated users are sent to `/login`.
 
 ## Production build
 

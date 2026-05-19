@@ -9,10 +9,12 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 export function AppShell({
   profileName,
   profileEmail,
+  demoMode = false,
   children,
 }: {
   profileName: string;
   profileEmail: string;
+  demoMode?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -47,6 +49,11 @@ export function AppShell({
           </Sheet>
           <span className="ml-3 text-sm font-semibold text-foreground">Command Center</span>
         </header>
+        {demoMode ? (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+            Demo mode: using seeded in-memory data. Restarting the dev server resets changes.
+          </div>
+        ) : null}
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">{children}</main>
       </div>
     </div>
