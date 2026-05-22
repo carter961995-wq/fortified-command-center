@@ -13,6 +13,10 @@ Internal admin dashboard for **Fortified Fence & Weld**: commercial fence, gate,
 - **Maintenance contracts**: Create contracts, generate scheduled visits, link visits to work orders.
 - **Reports**: Rolling twelve-month revenue and P&amp;L rollups, open AR, subcontractor scorecard, job costs by sub.
 - **Settings**: Placeholders for Stripe and QuickBooks integration.
+- **Fence Builders Bible workspaces**: Planner, leads, Gmail-style inbox, clients, jobs, measurement tool,
+  subcontractor map, website extractor, documents, notepad, fence bible, reports, and dedicated invoicing.
+- **Automation-ready integrations**: Settings now exposes the intended Google Workspace/Gmail, Gemini,
+  SMS, and phone-call intake surfaces. Live automation requires real OAuth/API credentials and webhooks.
 
 ## Prerequisites
 
@@ -74,6 +78,9 @@ values, and set `NEXT_PUBLIC_DEMO_MODE=false` if you want to force Supabase mode
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) key — used in browser and server with user session |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key — **server only**; used for privileged storage uploads (e.g. invoice PDFs) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional Google Workspace OAuth app credentials for Gmail ingestion |
+| `GEMINI_API_KEY` | Optional Gemini key for extracting leads, work orders, contacts, and invoice tasks from messages/documents |
+| `TWILIO_*` | Optional SMS/phone intake credentials for text/call workflows |
 
 Never expose the service role key to the client.
 

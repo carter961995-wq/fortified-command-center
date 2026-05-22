@@ -163,6 +163,8 @@ export async function fetchReports() {
 }
 
 export function moduleForSlug(slug: string) {
+  if (slug === "clients") return moduleMap.customers;
+  if (slug === "jobs") return moduleMap["work-orders"];
   return moduleMap[slug];
 }
 

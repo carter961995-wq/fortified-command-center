@@ -341,9 +341,82 @@ export const modules: ModuleDefinition[] = [
 
 export const moduleMap = Object.fromEntries(modules.map((module) => [module.slug, module])) as Record<string, ModuleDefinition>;
 
+export const featurePages = [
+  {
+    slug: "planner",
+    label: "Planner",
+    title: "Planner",
+    description: "Daily schedule board for installs, estimates, follow-ups, and crew routing.",
+  },
+  {
+    slug: "leads",
+    label: "Leads",
+    title: "Leads",
+    description: "Lead intake, bid opportunities, callbacks, and sales follow-up pipeline.",
+  },
+  {
+    slug: "email-inbox",
+    label: "Email Inbox",
+    title: "Email Inbox",
+    description: "Central place for inbound customer messages, work requests, photos, and approvals.",
+  },
+  {
+    slug: "measurement-tool",
+    label: "Measurement Tool",
+    title: "Measurement Tool",
+    description: "Job takeoff workspace for fence runs, gate openings, materials, and quote math.",
+  },
+  {
+    slug: "subcontractor-map",
+    label: "Subcontractor Map",
+    title: "Subcontractor Map",
+    description: "Map view for vendor coverage, trade specialties, service regions, and dispatch fit.",
+  },
+  {
+    slug: "website-extractor",
+    label: "Website Extractor",
+    title: "Website Extractor",
+    description: "Research utility for pulling customer, property, and lead details from websites.",
+  },
+  {
+    slug: "documents",
+    label: "Documents",
+    title: "Documents",
+    description: "Organize job files, photos, invoices, insurance certificates, W-9s, and PDFs.",
+  },
+  {
+    slug: "notepad",
+    label: "Notepad",
+    title: "Notepad",
+    description: "Scratchpad for field notes, call notes, reminders, and estimating ideas.",
+  },
+  {
+    slug: "fence-bible",
+    label: "Fence Bible",
+    title: "Fence Bible",
+    description: "Internal knowledge base for fence, gate, welding, pricing, scripts, and SOPs.",
+  },
+] as const;
+
+export const featurePageMap = Object.fromEntries(featurePages.map((page) => [page.slug, page])) as Record<
+  string,
+  (typeof featurePages)[number]
+>;
+
 export const navItems = [
   { href: "/dashboard", label: "Dashboard" },
-  ...modules.map((module) => ({ href: `/${module.slug}`, label: module.label })),
+  { href: "/planner", label: "Planner" },
+  { href: "/leads", label: "Leads" },
+  { href: "/email-inbox", label: "Email Inbox" },
+  { href: "/clients", label: "Clients" },
+  { href: "/jobs", label: "Jobs" },
+  { href: "/invoices", label: "Invoicing" },
+  { href: "/measurement-tool", label: "Measurement Tool" },
+  { href: "/subcontractor-map", label: "Subcontractor Map" },
+  { href: "/website-extractor", label: "Website Extractor" },
+  { href: "/documents", label: "Documents" },
+  { href: "/notepad", label: "Notepad" },
+  { href: "/fence-bible", label: "Fence Bible" },
   { href: "/reports", label: "Reports" },
   { href: "/settings", label: "Settings" }
 ];

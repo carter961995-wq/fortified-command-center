@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --background: #f4f2ee;
-  --foreground: #171717;
-  --panel: #ffffff;
-  --panel-muted: #f8fafc;
-  --border: #d9d6cf;
-  --brand: #b45309;
-  --brand-dark: #78350f;
+  --background: #0b1629;
+  --foreground: #e2e8f0;
+  --panel: #111f38;
+  --panel-muted: #0c172b;
+  --border: #1f304d;
+  --brand: #f97316;
+  --brand-dark: #c2410c;
 }
 
 * { box-sizing: border-box; }
@@ -26,17 +26,17 @@ a { color: inherit; text-decoration: none; }
 
 input, select, textarea {
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid #2b4168;
   border-radius: 0.75rem;
-  background: white;
+  background: #0c172b;
   padding: 0.65rem 0.8rem;
-  color: #111827;
+  color: #e2e8f0;
   font: inherit;
 }
 
 textarea { min-height: 7rem; resize: vertical; }
 
-label { display: grid; gap: 0.35rem; font-size: 0.875rem; font-weight: 700; color: #374151; }
+label { display: grid; gap: 0.35rem; font-size: 0.875rem; font-weight: 700; color: #cbd5e1; }
 
 button, .button-like { font: inherit; }
 

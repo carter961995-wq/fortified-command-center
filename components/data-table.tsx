@@ -30,8 +30,8 @@ export function DataTable({ rows, columns, basePath, primaryKey }: { rows: Plain
   }, [query, rows, status]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-stone-200 bg-stone-50 p-4 md:flex-row md:items-center md:justify-between">
+    <div className="overflow-hidden rounded-2xl border border-[#1f304d] bg-[#111f38] shadow-sm">
+      <div className="flex flex-col gap-3 border-b border-[#1f304d] bg-[#0c172b] p-4 md:flex-row md:items-center md:justify-between">
         <input aria-label="Search records" className="max-w-md" placeholder="Search records..." value={query} onChange={(event) => setQuery(event.target.value)} />
         {statuses.length > 0 ? (
           <select aria-label="Filter by status" className="max-w-xs" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -41,26 +41,26 @@ export function DataTable({ rows, columns, basePath, primaryKey }: { rows: Plain
         ) : null}
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-stone-200 text-sm">
-          <thead className="bg-white text-left text-xs font-black uppercase tracking-wide text-stone-500">
+        <table className="min-w-full divide-y divide-[#1f304d] text-sm">
+          <thead className="bg-[#111f38] text-left text-xs font-black uppercase tracking-wide text-slate-500">
             <tr>
               {columns.map((column) => <th className="px-4 py-3" key={column.key}>{column.label}</th>)}
               <th className="px-4 py-3">Open</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-stone-100 bg-white">
+          <tbody className="divide-y divide-[#1f304d] bg-[#111f38]">
             {filtered.map((row) => (
-              <tr className="hover:bg-amber-50/50" key={String(row.id)}>
+              <tr className="hover:bg-orange-500/5" key={String(row.id)}>
                 {columns.map((column, index) => (
-                  <td className={`px-4 py-3 ${index === 0 ? "font-black text-stone-950" : "text-stone-700"}`} key={column.key}>{formatCell(row, column)}</td>
+                  <td className={`px-4 py-3 ${index === 0 ? "font-black text-white" : "text-slate-300"}`} key={column.key}>{formatCell(row, column)}</td>
                 ))}
-                <td className="px-4 py-3"><Link className="font-black text-amber-700 hover:text-amber-900" href={`${basePath}/${String(row.id)}`}>View</Link></td>
+                <td className="px-4 py-3"><Link className="font-black text-orange-400 hover:text-orange-300" href={`${basePath}/${String(row.id)}`}>View</Link></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="border-t border-stone-200 bg-stone-50 px-4 py-3 text-xs font-semibold text-stone-500">Showing {filtered.length} of {rows.length} records. Primary: {primaryKey.replaceAll("_", " ")}.</div>
+      <div className="border-t border-[#1f304d] bg-[#0c172b] px-4 py-3 text-xs font-semibold text-slate-500">Showing {filtered.length} of {rows.length} records. Primary: {primaryKey.replaceAll("_", " ")}.</div>
     </div>
   );
 }
