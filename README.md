@@ -34,6 +34,35 @@ environment variables are missing or still set to the placeholder values from `.
 Demo mode includes sample customers, locations, subcontractors, work orders, quotes, invoices, payments,
 maintenance contracts, and reports. Changes are stored in memory and reset when the dev server restarts.
 
+## Mac desktop download
+
+The app can also be packaged as a Mac desktop app with Electron. The packaged app starts its own private
+local Next.js server and opens the dashboard in a desktop window, so the person using it does not need to
+run terminal commands.
+
+To test the desktop shell while developing:
+
+```bash
+npm install
+npm run desktop:dev
+```
+
+To produce a Mac download on a Mac:
+
+```bash
+npm install
+npm run desktop:dist
+```
+
+The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
+
+You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
+manually. Its artifact is named `fortified-command-center-mac`.
+
+The default local desktop build is unsigned. On macOS, unsigned builds may require right-clicking the app
+and choosing **Open** the first time. For a public download that opens without Gatekeeper warnings, sign and
+notarize the app with an Apple Developer ID certificate.
+
 ## Environment variables
 
 For real persisted data, copy `.env.example` to `.env.local`, replace the placeholders with real Supabase
