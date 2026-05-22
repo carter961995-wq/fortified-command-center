@@ -67,6 +67,20 @@ The default local desktop build is unsigned. On macOS, unsigned builds may requi
 and choosing **Open** the first time. For a public download that opens without Gatekeeper warnings, sign and
 notarize the app with an Apple Developer ID certificate.
 
+## Google Workspace and Gemini connection
+
+Settings includes a one-time **Connect Google** flow. To use it with real Google data:
+
+1. Create a Google Cloud OAuth client.
+2. Add the redirect URI shown in Settings.
+   - Local dev usually uses `http://localhost:3000/api/integrations/google/callback`.
+   - The packaged Mac app uses `http://127.0.0.1:43111/api/integrations/google/callback` by default.
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+4. Optional: set `GEMINI_API_KEY` so Workspace sync can extract leads, work orders, contacts, and invoice tasks.
+
+The app requests offline Google access so you sign in once, then it can refresh access for Gmail, Drive
+metadata, Calendar, and Contacts sync. Local desktop tokens are stored under the app user-data folder.
+
 ## Environment variables
 
 For real persisted data, copy `.env.example` to `.env.local`, replace the placeholders with real Supabase
@@ -79,7 +93,9 @@ values, and set `NEXT_PUBLIC_DEMO_MODE=false` if you want to force Supabase mode
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) key — used in browser and server with user session |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key — **server only**; used for privileged storage uploads (e.g. invoice PDFs) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional Google Workspace OAuth app credentials for Gmail ingestion |
+| `GOOGLE_REDIRECT_URI` | Optional OAuth callback override. Use `http://localhost:3000/api/integrations/google/callback` for local dev or `http://127.0.0.1:43111/api/integrations/google/callback` for the packaged Mac app |
 | `GEMINI_API_KEY` | Optional Gemini key for extracting leads, work orders, contacts, and invoice tasks from messages/documents |
+| `GEMINI_MODEL` | Optional Gemini model name; defaults to `gemini-1.5-flash` |
 | `TWILIO_*` | Optional SMS/phone intake credentials for text/call workflows |
 
 Never expose the service role key to the client.

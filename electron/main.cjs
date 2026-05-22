@@ -7,12 +7,18 @@ const path = require("path");
 let serverProcess = null;
 let mainWindow = null;
 
-function getFreePort() {
+function getFreePort(preferredPort) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.unref();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
+    server.on("error", (error) => {
+      if (preferredPort) {
+        getFreePort().then(resolve).catch(reject);
+        return;
+      }
+      reject(error);
+    });
+    server.listen(preferredPort || 0, "127.0.0.1", () => {
       const address = server.address();
       server.close(() => {
         if (!address || typeof address === "string") {
@@ -50,9 +56,11 @@ function waitForServer(url, attempts = 120) {
 }
 
 async function startBundledNextServer() {
-  const port = await getFreePort();
+  const preferredPort = Number(process.env.FORTIFIED_DESKTOP_PORT || 43111);
+  const port = await getFreePort(preferredPort);
   const appRoot = path.join(process.resourcesPath, "app");
   const serverPath = path.join(appRoot, "server.js");
+  const userDataDir = app.getPath("userData");
 
   serverProcess = spawn(process.execPath, [serverPath], {
     cwd: appRoot,
@@ -61,6 +69,10 @@ async function startBundledNextServer() {
       ELECTRON_RUN_AS_NODE: "1",
       NODE_ENV: "production",
       NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE ?? "true",
+      FORTIFIED_USER_DATA_DIR: userDataDir,
+      GOOGLE_REDIRECT_URI:
+        process.env.GOOGLE_REDIRECT_URI ||
+        (port === preferredPort ? `http://127.0.0.1:${preferredPort}/api/integrations/google/callback` : ""),
       HOSTNAME: "127.0.0.1",
       PORT: String(port),
     },

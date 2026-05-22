@@ -1,7 +1,13 @@
 import { Card, PageHeader } from "../../../components/ui";
+import { GoogleIntegrationPanel } from "../../../components/google-integration-panel";
 import { isSupabaseConfigured } from "../../../lib/env";
 
-export default function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
+  const sp = await searchParams;
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
       <PageHeader title="Settings" description="Environment, security, Google Workspace, Gemini, phone/text intake, and integration readiness." />
@@ -15,7 +21,10 @@ export default function SettingsPage() {
       </Card>
       <Card>
         <h2 className="text-lg font-black text-white">Automation integrations</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4">
+          <GoogleIntegrationPanel message={sp.google} />
+        </div>
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           {[
             ["Google Workspace / Gmail", "OAuth connection for reading authorized mailboxes, labels, attachments, and customer/vendor message threads."],
             ["Gemini extraction", "Classify emails, texts, PDFs, and notes into draft leads, work orders, contacts, and invoice follow-up tasks."],
