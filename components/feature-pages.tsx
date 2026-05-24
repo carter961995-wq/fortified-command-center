@@ -10,6 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import { Card, ErrorNotice } from "./ui";
+import { MeasurementTool } from "./measurement-tool";
 import { displayValue, money, type PlainRow } from "../lib/business";
 import { featurePageMap, moduleMap } from "../lib/schema";
 import { fetchModuleRows } from "../lib/data";
@@ -229,6 +230,7 @@ export async function FeaturePage({ slug }: { slug: string }) {
   if (slug === "planner") return <PlannerPage />;
   if (slug === "leads") return <LeadsPage />;
   if (slug === "email-inbox") return <EmailInboxPage />;
+  if (slug === "measurement-tool") return <MeasurementTool />;
   if (slug === "subcontractor-map") return <SubcontractorMapPage />;
   if (slug === "invoices") return <InvoicingToolPage />;
 
