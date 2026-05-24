@@ -57,3 +57,41 @@ workflows:
       - out/**
       - build/**
       - dist/**
+
+  mac-desktop-app:
+    name: Fortified Command Center Mac Download
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    environment:
+      node: 22
+      vars:
+        NEXT_TELEMETRY_DISABLED: "1"
+        NEXT_PUBLIC_DEMO_MODE: "true"
+
+    cache:
+      cache_paths:
+        - ~/.npm
+        - .next/cache
+        - ~/Library/Caches/electron
+        - ~/Library/Caches/electron-builder
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          set -euo pipefail
+
+          node --version
+          npm --version
+          npm ci
+
+      - name: Build Mac desktop app
+        script: |
+          set -euo pipefail
+
+          npm run desktop:dist
+          ls -lh dist-desktop
+
+    artifacts:
+      - dist-desktop/*.dmg
+      - dist-desktop/*.zip
