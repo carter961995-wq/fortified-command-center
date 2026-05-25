@@ -9,6 +9,15 @@ on:
 jobs:
   build-mac:
     runs-on: macos-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_DEMO_MODE: "true"
+      REQUIRE_MAC_SIGNING: "true"
+      CSC_LINK: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -22,8 +31,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check Mac signing credentials
+        run: node scripts/verify-mac-signing-env.mjs
+
       - name: Build Mac app
         run: npm run desktop:dist
+
+      - name: Verify signed Mac app
+        run: |
+          set -euo pipefail
+
+          verified=0
+          for app in dist-desktop/mac*/Fortified\ Command\ Center.app dist-desktop/mac/Fortified\ Command\ Center.app; do
+            if [ -d "$app" ]; then
+              codesign --verify --deep --strict --verbose=2 "$app"
+              spctl --assess --type execute --verbose=4 "$app"
+              verified=1
+            fi
+          done
+
+          if [ "$verified" -ne 1 ]; then
+            echo "No packaged .app bundle found to verify."
+            exit 1
+          fi
 
       - name: Upload Mac download artifacts
         uses: actions/upload-artifact@v4

@@ -63,9 +63,30 @@ The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
-The default local desktop build is unsigned. On macOS, unsigned builds may require right-clicking the app
-and choosing **Open** the first time. For a public download that opens without Gatekeeper warnings, sign and
-notarize the app with an Apple Developer ID certificate.
+Public Mac downloads must be signed with a Developer ID Application certificate and notarized by Apple. The
+Codemagic Mac workflow and the GitHub **Build Mac desktop app** workflow now require these secure variables
+before they will publish artifacts:
+
+| Variable | Purpose |
+|----------|---------|
+| `CSC_LINK` | Developer ID Application `.p12` certificate, as base64 or a secure file URL supported by electron-builder |
+| `CSC_KEY_PASSWORD` | Password for the `.p12` certificate |
+| `APPLE_ID` | Apple ID used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for that Apple ID |
+| `APPLE_TEAM_ID` | Apple Developer team ID |
+
+In Codemagic, add those values to a secure environment group named `mac_desktop_signing`. In GitHub, add them
+as repository secrets; the certificate secret is named `MAC_CERTIFICATE_P12_BASE64` and maps to `CSC_LINK` in
+the workflow.
+
+Local desktop builds can still be unsigned for development:
+
+```bash
+npm run desktop:dist:unsigned
+```
+
+Unsigned builds are only for local testing. Safari/Gatekeeper can report unsigned downloaded Electron apps as
+damaged, so do not distribute unsigned `.dmg` or `.zip` files.
 
 ## Google Workspace and Gemini connection
 
