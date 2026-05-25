@@ -63,9 +63,23 @@ The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
-The default local desktop build is unsigned. On macOS, unsigned builds may require right-clicking the app
-and choosing **Open** the first time. For a public download that opens without Gatekeeper warnings, sign and
-notarize the app with an Apple Developer ID certificate.
+Public downloads should be signed and notarized so macOS Gatekeeper lets people open the app normally. To
+enable that in GitHub Actions, add these repository secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `MACOS_CERTIFICATE` | Base64-encoded Developer ID Application `.p12` certificate for Electron Builder (`CSC_LINK`) |
+| `MACOS_CERTIFICATE_PASSWORD` | Password for the `.p12` certificate (`CSC_KEY_PASSWORD`) |
+| `APPLE_ID` | Apple Developer account email for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
+
+Alternatively, notarization can use App Store Connect API credentials with `APPLE_API_KEY`,
+`APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` instead of `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`.
+`APPLE_API_KEY` may be an absolute path to the `.p8` key, the raw `.p8` contents, or the base64-encoded
+`.p8` contents.
+Local desktop builds without these secrets still work for development, but macOS may require right-clicking
+the app and choosing **Open** the first time.
 
 ## Google Workspace and Gemini connection
 

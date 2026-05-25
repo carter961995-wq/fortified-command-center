@@ -52,6 +52,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.5.0",
     "@eslint/eslintrc": "^3",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
@@ -71,6 +72,7 @@
     "appId": "com.fortifiedfence.commandcenter",
     "productName": "Fortified Command Center",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "afterSign": "scripts/notarize-mac.cjs",
     "directories": {
       "output": "dist-desktop"
     },
@@ -85,11 +87,14 @@
     ],
     "mac": {
       "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
       "target": [
         "dmg",
         "zip"
-      ],
-      "identity": null
+      ]
     }
   }
 }
