@@ -147,7 +147,7 @@ workflows:
           fi
 
           verified=0
-          for app in dist-desktop/mac*/Fortified\ Command\ Center.app dist-desktop/mac/Fortified\ Command\ Center.app; do
+          for app in dist-desktop/mac*/Fortified\ Command\ Center.app; do
             if [ -d "$app" ]; then
               if [ "$signed_build" -eq 1 ]; then
                 codesign --verify --deep --strict --verbose=2 "$app"
