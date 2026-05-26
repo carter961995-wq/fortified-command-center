@@ -65,9 +65,18 @@ workflows:
 
     environment:
       node: 22
+      groups:
+        - mac_desktop_signing
       vars:
         NEXT_TELEMETRY_DISABLED: "1"
         NEXT_PUBLIC_DEMO_MODE: "true"
+        REQUIRE_MAC_SIGNING: "true"
+        # Add these values to the mac_desktop_signing secure environment group:
+        # CSC_LINK (Developer ID Application .p12 as base64 or secure file URL)
+        # CSC_KEY_PASSWORD
+        # APPLE_ID
+        # APPLE_APP_SPECIFIC_PASSWORD
+        # APPLE_TEAM_ID
 
     cache:
       cache_paths:
@@ -89,7 +98,23 @@ workflows:
         script: |
           set -euo pipefail
 
+          node scripts/verify-mac-signing-env.mjs
           npm run desktop:dist
+
+          verified=0
+          for app in dist-desktop/mac*/Fortified\ Command\ Center.app dist-desktop/mac/Fortified\ Command\ Center.app; do
+            if [ -d "$app" ]; then
+              codesign --verify --deep --strict --verbose=2 "$app"
+              spctl --assess --type execute --verbose=4 "$app"
+              verified=1
+            fi
+          done
+
+          if [ "$verified" -ne 1 ]; then
+            echo "No packaged .app bundle found to verify."
+            exit 1
+          fi
+
           ls -lh dist-desktop
 
     artifacts:

@@ -11,7 +11,8 @@
     "desktop:dev": "concurrently -k -n next,electron -c blue,green \"npm run dev\" \"wait-on http://localhost:3000 && ELECTRON_START_URL=http://localhost:3000 electron electron/main.cjs\"",
     "desktop:prepare": "node scripts/prepare-electron-next.mjs",
     "desktop:dir": "npm run build && npm run desktop:prepare && electron-builder --dir --publish never",
-    "desktop:dist": "npm run build && npm run desktop:prepare && electron-builder --mac --publish never"
+    "desktop:dist": "npm run build && npm run desktop:prepare && electron-builder --mac --publish never",
+    "desktop:dist:unsigned": "npm run build && npm run desktop:prepare && ELECTRON_BUILDER_ALLOW_UNSIGNED_MAC=1 electron-builder --mac --publish never"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
