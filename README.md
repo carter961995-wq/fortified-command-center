@@ -63,6 +63,11 @@ The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
+Codemagic's **Fortified Command Center Mac Download** workflow also produces `.dmg` and `.zip` artifacts. If
+the `mac_desktop_signing` environment group does not contain signing and notarization credentials, Codemagic
+builds unsigned development artifacts instead of failing before packaging. Add the same `CSC_*` and `APPLE_*`
+values listed below to that environment group when you need signed, notarized public downloads.
+
 Public downloads should be signed and notarized so macOS Gatekeeper lets people open the app normally. To
 enable that in GitHub Actions, add these repository secrets:
 
