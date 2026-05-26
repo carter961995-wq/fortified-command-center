@@ -63,30 +63,23 @@ The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
-Public Mac downloads must be signed with a Developer ID Application certificate and notarized by Apple. The
-Codemagic Mac workflow and the GitHub **Build Mac desktop app** workflow now require these secure variables
-before they will publish artifacts:
+Public downloads should be signed and notarized so macOS Gatekeeper lets people open the app normally. To
+enable that in GitHub Actions, add these repository secrets:
 
-| Variable | Purpose |
-|----------|---------|
-| `CSC_LINK` | Developer ID Application `.p12` certificate, as base64 or a secure file URL supported by electron-builder |
-| `CSC_KEY_PASSWORD` | Password for the `.p12` certificate |
-| `APPLE_ID` | Apple ID used for notarization |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for that Apple ID |
-| `APPLE_TEAM_ID` | Apple Developer team ID |
+| Secret | Purpose |
+|--------|---------|
+| `MACOS_CERTIFICATE` | Base64-encoded Developer ID Application `.p12` certificate for Electron Builder (`CSC_LINK`) |
+| `MACOS_CERTIFICATE_PASSWORD` | Password for the `.p12` certificate (`CSC_KEY_PASSWORD`) |
+| `APPLE_ID` | Apple Developer account email for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
 
-In Codemagic, add those values to a secure environment group named `mac_desktop_signing`. In GitHub, add them
-as repository secrets; the certificate secret is named `MAC_CERTIFICATE_P12_BASE64` and maps to `CSC_LINK` in
-the workflow.
-
-Local desktop builds can still be unsigned for development:
-
-```bash
-npm run desktop:dist:unsigned
-```
-
-Unsigned builds are only for local testing. Safari/Gatekeeper can report unsigned downloaded Electron apps as
-damaged, so do not distribute unsigned `.dmg` or `.zip` files.
+Alternatively, notarization can use App Store Connect API credentials with `APPLE_API_KEY`,
+`APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` instead of `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`.
+`APPLE_API_KEY` may be an absolute path to the `.p8` key, the raw `.p8` contents, or the base64-encoded
+`.p8` contents.
+Local desktop builds without these secrets still work for development, but macOS may require right-clicking
+the app and choosing **Open** the first time.
 
 ## Google Workspace and Gemini connection
 
