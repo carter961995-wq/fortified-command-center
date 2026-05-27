@@ -1,4 +1,12 @@
-const { loadEnvConfig } = require("@next/env");
+let loadEnvConfig;
+
+try {
+  ({ loadEnvConfig } = require("@next/env"));
+} catch (error) {
+  if (error?.code !== "MODULE_NOT_FOUND") {
+    throw error;
+  }
+}
 
 let envLoaded = false;
 
@@ -7,7 +15,9 @@ function loadDesktopEnv(projectDir = process.cwd()) {
     return;
   }
 
-  loadEnvConfig(projectDir);
+  if (loadEnvConfig) {
+    loadEnvConfig(projectDir);
+  }
   envLoaded = true;
 }
 
