@@ -76,13 +76,17 @@ enable that in GitHub Actions, add these repository secrets:
 | `MACOS_CERTIFICATE` | Base64-encoded Developer ID Application `.p12` certificate for Electron Builder (`CSC_LINK`) |
 | `MACOS_CERTIFICATE_PASSWORD` | Password for the `.p12` certificate (`CSC_KEY_PASSWORD`) |
 | `APPLE_ID` | Apple Developer account email for notarization |
-| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password for `APPLE_ID` (`APPLE_ID_PASSWORD` is also accepted) |
 | `APPLE_TEAM_ID` | Apple Developer Team ID |
 
 Alternatively, notarization can use App Store Connect API credentials with `APPLE_API_KEY`,
 `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` instead of `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`.
+`APPLE_API_ISSUER_ID` is also accepted as an alias for `APPLE_API_ISSUER`.
 `APPLE_API_KEY` may be an absolute path to the `.p8` key, the raw `.p8` contents, or the base64-encoded
 `.p8` contents.
+For local Mac packaging, `.env.local` is loaded before the desktop signing scripts run. You can use either
+Electron Builder's `CSC_LINK` / `CSC_KEY_PASSWORD` names or the GitHub secret-style
+`MACOS_CERTIFICATE` / `MACOS_CERTIFICATE_PASSWORD` aliases.
 Local desktop builds without these secrets still work for development with `npm run desktop:dist:unsigned`,
 but macOS may require right-clicking the app and choosing **Open** the first time.
 
@@ -116,6 +120,9 @@ values, and set `NEXT_PUBLIC_DEMO_MODE=false` if you want to force Supabase mode
 | `GEMINI_API_KEY` | Optional Gemini key for extracting leads, work orders, contacts, and invoice tasks from messages/documents |
 | `GEMINI_MODEL` | Optional Gemini model name; defaults to `gemini-1.5-flash` |
 | `TWILIO_*` | Optional SMS/phone intake credentials for text/call workflows |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | Optional Mac desktop signing certificate and password. `MACOS_CERTIFICATE` / `MACOS_CERTIFICATE_PASSWORD` are accepted aliases |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Optional Apple ID notarization credentials for signed Mac desktop downloads. `APPLE_ID_PASSWORD` is accepted as a password alias |
+| `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` | Optional App Store Connect API notarization credentials. `APPLE_API_ISSUER_ID` is accepted as an issuer alias |
 
 Never expose the service role key to the client.
 
