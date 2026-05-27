@@ -63,10 +63,10 @@ The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
-Codemagic's **Fortified Command Center Mac Download** workflow also produces `.dmg` and `.zip` artifacts. If
-the `mac_desktop_signing` environment group does not contain signing and notarization credentials, Codemagic
-builds unsigned development artifacts instead of failing before packaging. Add the same `CSC_*` and `APPLE_*`
-values listed below to that environment group when you need signed, notarized public downloads.
+Codemagic's **Fortified Command Center Mac Download** workflow also produces `.dmg` and `.zip` artifacts. Add
+the certificate and Apple notarization values listed below to the `mac_desktop_signing` environment group
+before running it. The workflow fails without signing and notarization credentials so public downloads are
+not published in a state that triggers Gatekeeper malware-verification warnings.
 
 Public downloads should be signed and notarized so macOS Gatekeeper lets people open the app normally. To
 enable that in GitHub Actions, add these repository secrets:
@@ -83,8 +83,8 @@ Alternatively, notarization can use App Store Connect API credentials with `APPL
 `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER` instead of `APPLE_ID` and `APPLE_APP_SPECIFIC_PASSWORD`.
 `APPLE_API_KEY` may be an absolute path to the `.p8` key, the raw `.p8` contents, or the base64-encoded
 `.p8` contents.
-Local desktop builds without these secrets still work for development, but macOS may require right-clicking
-the app and choosing **Open** the first time.
+Local desktop builds without these secrets still work for development with `npm run desktop:dist:unsigned`,
+but macOS may require right-clicking the app and choosing **Open** the first time.
 
 ## Google Workspace and Gemini connection
 
