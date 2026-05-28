@@ -65,8 +65,9 @@ manually. Its artifact is named `fortified-command-center-mac`.
 
 Codemagic's **Fortified Command Center Mac Download** workflow also produces `.dmg` and `.zip` artifacts. Add
 the certificate and Apple notarization values listed below to the `mac_desktop_signing` environment group
-before running it. The workflow fails without signing and notarization credentials so public downloads are
-not published in a state that triggers Gatekeeper malware-verification warnings.
+before using the artifacts for public downloads. If those values are missing, the workflow falls back to an
+unsigned build and skips Gatekeeper verification; unsigned artifacts may require right-clicking the app and
+choosing **Open** the first time.
 
 Public downloads should be signed and notarized so macOS Gatekeeper lets people open the app normally. To
 enable that in GitHub Actions, add these repository secrets:
