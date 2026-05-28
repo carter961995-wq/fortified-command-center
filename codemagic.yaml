@@ -76,9 +76,10 @@ workflows:
         # CSC_LINK (Developer ID Application .p12 as base64 or secure file URL)
         # CSC_KEY_PASSWORD
         # APPLE_ID
-        # APPLE_APP_SPECIFIC_PASSWORD
+        # APPLE_APP_SPECIFIC_PASSWORD (or APPLE_ID_PASSWORD)
         # APPLE_TEAM_ID
-        # Or notarize with APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER.
+        # Or notarize with APPLE_API_KEY, APPLE_API_KEY_ID, and
+        # APPLE_API_ISSUER (or APPLE_API_ISSUER_ID).
 
     cache:
       cache_paths:

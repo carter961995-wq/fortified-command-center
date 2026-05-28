@@ -1,21 +1,21 @@
+const {
+  getMacSigningStatus,
+  loadDesktopEnv,
+  normalizeDesktopSigningEnv,
+  present,
+} = require("./scripts/desktop-signing-env.cjs");
+
+loadDesktopEnv();
+normalizeDesktopSigningEnv();
+
 const requireMacSigning = process.env.REQUIRE_MAC_SIGNING === "true";
 const allowUnsignedMac = process.env.ELECTRON_BUILDER_ALLOW_UNSIGNED_MAC === "1";
-const present = (value) => typeof value === "string" && value.trim().length > 0;
-const hasAppleIdNotarizationCredentials = Boolean(
-  present(process.env.APPLE_ID) &&
-    present(process.env.APPLE_APP_SPECIFIC_PASSWORD) &&
-    present(process.env.APPLE_TEAM_ID),
-);
-const hasApiKeyNotarizationCredentials = Boolean(
-  present(process.env.APPLE_API_KEY) &&
-    present(process.env.APPLE_API_KEY_ID) &&
-    present(process.env.APPLE_API_ISSUER),
-);
-const hasNotarizationCredentials = hasAppleIdNotarizationCredentials || hasApiKeyNotarizationCredentials;
+const { hasNotarizationCredentials } = getMacSigningStatus();
 
 if (requireMacSigning && !hasNotarizationCredentials) {
   throw new Error(
-    "REQUIRE_MAC_SIGNING=true requires Apple ID credentials (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID) or App Store Connect API credentials (APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER) for notarization.",
+    "REQUIRE_MAC_SIGNING=true requires Apple ID credentials (APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD or APPLE_ID_PASSWORD, APPLE_TEAM_ID) " +
+      "or App Store Connect API credentials (APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER or APPLE_API_ISSUER_ID) for notarization.",
   );
 }
 

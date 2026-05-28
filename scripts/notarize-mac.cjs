@@ -2,19 +2,23 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const { notarize } = require("@electron/notarize");
+const { loadDesktopEnv, normalizeDesktopSigningEnv, present } = require("./desktop-signing-env.cjs");
 
-function present(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
+loadDesktopEnv();
+normalizeDesktopSigningEnv();
 
 function resolveApiKeyFile(apiKey) {
   if (fs.existsSync(apiKey)) {
     return apiKey;
   }
 
-  const keyContents = apiKey.includes("-----BEGIN") ? apiKey : Buffer.from(apiKey, "base64").toString("utf8");
+  const keyContents = apiKey.includes("-----BEGIN")
+    ? apiKey
+    : Buffer.from(apiKey, "base64").toString("utf8");
   if (!keyContents.includes("-----BEGIN")) {
-    throw new Error("APPLE_API_KEY must be an existing .p8 path, raw .p8 contents, or base64-encoded .p8 contents.");
+    throw new Error(
+      "APPLE_API_KEY must be an existing .p8 path, raw .p8 contents, or base64-encoded .p8 contents.",
+    );
   }
   const keyPath = path.join(os.tmpdir(), `fortified-notary-${Date.now()}.p8`);
   fs.writeFileSync(keyPath, keyContents, { mode: 0o600 });
