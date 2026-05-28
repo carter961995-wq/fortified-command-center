@@ -52,7 +52,7 @@ module.exports = {
   ],
   mac: {
     category: "public.app-category.business",
-    target: ["dmg", "zip"],
+    target: ["dmg"],
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "electron/entitlements.mac.plist",

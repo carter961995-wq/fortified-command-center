@@ -139,4 +139,3 @@ workflows:
 
     artifacts:
       - dist-desktop/*.dmg
-      - dist-desktop/*.zip

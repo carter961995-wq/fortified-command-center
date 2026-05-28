@@ -58,12 +58,12 @@ npm install
 npm run desktop:dist
 ```
 
-The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
+The Mac `.dmg` file is written to `dist-desktop/`.
 
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
-Codemagic's **Fortified Command Center Mac Download** workflow also produces `.dmg` and `.zip` artifacts. Add
+Codemagic's **Fortified Command Center Mac Download** workflow also produces a `.dmg` artifact. Add
 the certificate and Apple notarization values listed below to the `mac_desktop_signing` environment group
 before using the artifacts for public downloads. If those values are missing, the workflow falls back to an
 unsigned build and skips Gatekeeper verification; unsigned artifacts may require right-clicking the app and
