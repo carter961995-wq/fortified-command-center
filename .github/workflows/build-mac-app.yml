@@ -83,4 +83,3 @@ jobs:
           name: fortified-command-center-mac
           path: |
             dist-desktop/*.dmg
-            dist-desktop/*.zip
