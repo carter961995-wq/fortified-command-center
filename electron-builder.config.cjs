@@ -52,7 +52,10 @@ module.exports = {
   ],
   mac: {
     category: "public.app-category.business",
-    target: ["dmg"],
+    // Publish both formats:
+    // - dmg: normal Mac installer disk image
+    // - zip: first-class Codemagic download (Codemagic wraps bare .dmg into *_artifacts.zip)
+    target: ["dmg", "zip"],
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "electron/entitlements.mac.plist",

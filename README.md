@@ -58,16 +58,33 @@ npm install
 npm run desktop:dist
 ```
 
-The Mac `.dmg` file is written to `dist-desktop/`.
+The Mac `.dmg` and `.zip` files are written to `dist-desktop/`.
 
 You can also build the downloadable Mac files from GitHub by running the **Build Mac desktop app** workflow
 manually. Its artifact is named `fortified-command-center-mac`.
 
-Codemagic's **Fortified Command Center Mac Download** workflow also produces a `.dmg` artifact. Add
-the certificate and Apple notarization values listed below to the `mac_desktop_signing` environment group
-before using the artifacts for public downloads. If those values are missing, the workflow falls back to an
-unsigned build and skips Gatekeeper verification; unsigned artifacts may require right-clicking the app and
-choosing **Open** the first time.
+### Codemagic Mac download
+
+Use the Codemagic workflow named **Fortified Command Center Mac Download** (not the Web Build workflow).
+
+Codemagic only treats some file types as standalone downloads. A bare `.dmg` is packed into a generic
+`*_artifacts.zip`, which is easy to mistake for a broken Mac app. This project therefore publishes:
+
+1. A standalone **`.zip`** containing `Fortified Command Center.app` (preferred Codemagic download)
+2. The **`.app`** bundle when Codemagic lists it separately
+3. The **`.dmg`** (may appear inside the generic artifacts archive)
+4. `HOW_TO_OPEN_MAC_BUILD.txt` with open instructions
+
+**How to open the download on a Mac**
+
+1. Download the standalone `.zip` named like `Fortified Command Center-*-mac-*.zip`
+2. Double-click to extract `Fortified Command Center.app`
+3. If macOS blocks it (unsigned/unnotarized): Finder → right-click the app → **Open** → **Open**
+4. If you only see `*_artifacts.zip`, unzip it first — the `.dmg` / instructions are inside
+
+Add the certificate and Apple notarization values below to the `mac_desktop_signing` environment group
+for public downloads. If those values are missing, the workflow falls back to an unsigned build and skips
+Gatekeeper verification.
 
 Public downloads should be signed and notarized so macOS Gatekeeper lets people open the app normally. To
 enable that in GitHub Actions, add these repository secrets:
