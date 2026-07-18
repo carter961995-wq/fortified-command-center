@@ -2,15 +2,13 @@ import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
-  ExternalLink,
   Mail,
-  MapPin,
   Plus,
-  RefreshCw,
   Search,
 } from "lucide-react";
 import { Card, ErrorNotice } from "./ui";
 import { MeasurementTool } from "./measurement-tool";
+import { JobIntakePanel } from "./job-intake-panel";
 import { displayValue, money, type PlainRow } from "../lib/business";
 import { featurePageMap, moduleMap } from "../lib/schema";
 import { fetchModuleRows } from "../lib/data";
@@ -121,20 +119,26 @@ function EmailInboxPage() {
         <div className="flex items-start gap-3">
           <AlertCircle className="mt-0.5 size-5 text-orange-400" />
           <div>
-            <h2 className="font-black uppercase text-white">Gmail isn&apos;t connected yet</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-400">Gmail isn&apos;t authorized — reconnect to grant access.</p>
+            <h2 className="font-black uppercase text-white">Job assignment emails live in Job Intake</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-400">
+              Work-order and mHelpDesk assignment messages are parsed on the Job Intake page. Connect Google in Settings,
+              then sync from Job Intake.
+            </p>
           </div>
         </div>
         <div className="mt-5 rounded-lg border border-[#263958] bg-[#111827] p-4 text-sm text-slate-400">
           <p className="font-black text-slate-200">How to connect:</p>
           <ol className="mt-2 list-inside list-decimal space-y-1">
             <li>Create a Google Cloud OAuth app for Gmail/Workspace access.</li>
-            <li>Add Gmail read scopes and a Gemini API key in Settings → Integrations.</li>
-            <li>Turn on auto-import to classify vendor emails, customer approvals, and work requests.</li>
+            <li>Add Gmail read + send scopes and a Gemini API key in Settings → Integrations.</li>
+            <li>Open Job Intake and run Sync Gmail jobs to import assignments into the tracker.</li>
           </ol>
         </div>
         <div className="mt-5 flex flex-wrap gap-2">
-          <button className="rounded-lg border border-slate-500 px-4 py-2 text-sm font-black text-slate-200"><RefreshCw className="mr-2 inline size-4" />Check again</button>
+          <Link className="rounded-lg border border-slate-500 px-4 py-2 text-sm font-black text-slate-200" href="/job-intake">
+            <Mail className="mr-2 inline size-4" />
+            Open Job Intake
+          </Link>
           <Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/settings">Open Settings</Link>
         </div>
       </section>
@@ -229,6 +233,7 @@ export async function FeaturePage({ slug }: { slug: string }) {
   const page = featurePageMap[slug];
   if (slug === "planner") return <PlannerPage />;
   if (slug === "leads") return <LeadsPage />;
+  if (slug === "job-intake") return <JobIntakePanel />;
   if (slug === "email-inbox") return <EmailInboxPage />;
   if (slug === "measurement-tool") return <MeasurementTool />;
   if (slug === "subcontractor-map") return <SubcontractorMapPage />;

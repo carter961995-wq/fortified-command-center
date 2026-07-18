@@ -361,6 +361,12 @@ export const featurePages = [
     description: "Central place for inbound customer messages, work requests, photos, and approvals.",
   },
   {
+    slug: "job-intake",
+    label: "Job Intake",
+    title: "Job Intake",
+    description: "Parse Gmail and mHelpDesk job alerts into clean briefs, then track notes, schedules, and outbound updates.",
+  },
+  {
     slug: "measurement-tool",
     label: "Measurement Tool",
     title: "Measurement Tool",
@@ -407,6 +413,7 @@ export const navItems = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/planner", label: "Planner" },
   { href: "/leads", label: "Leads" },
+  { href: "/job-intake", label: "Job Intake" },
   { href: "/email-inbox", label: "Email Inbox" },
   { href: "/clients", label: "Clients" },
   { href: "/jobs", label: "Jobs" },

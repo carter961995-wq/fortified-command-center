@@ -15,8 +15,11 @@ Internal admin dashboard for **Fortified Fence & Weld**: commercial fence, gate,
 - **Settings**: Placeholders for Stripe and QuickBooks integration.
 - **Fence Builders Bible workspaces**: Planner, leads, Gmail-style inbox, clients, jobs, measurement tool,
   subcontractor map, website extractor, documents, notepad, fence bible, reports, and dedicated invoicing.
-- **Automation-ready integrations**: Settings now exposes the intended Google Workspace/Gmail, Gemini,
-  SMS, and phone-call intake surfaces. Live automation requires real OAuth/API credentials and webhooks.
+- **Job Intake (Gmail + mHelpDesk)**: Watches assignment emails, parses store # / WO # / DNE / location /
+  timeframe into a clean job brief, adds jobs to a tracker queue, supports notes + schedule dates, approve-
+  before-send Gmail drafts, and stages mHelpDesk field-mapped updates.
+- **Automation-ready integrations**: Settings exposes Google Workspace/Gmail, mHelpDesk connection modes,
+  Gemini extraction, SMS, and phone-call intake surfaces. Live automation requires real OAuth/API credentials.
 
 ## Prerequisites
 
