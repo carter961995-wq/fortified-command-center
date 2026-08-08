@@ -52,11 +52,23 @@ workflows:
 
           npm run build
 
+          # Label web artifacts clearly so they are not mistaken for a Mac app download.
+          mkdir -p codemagic-web-artifacts
+          printf '%s\n' \
+            'These are Fortified Command Center WEB build artifacts from the' \
+            '"Fortified Command Center Web Build" workflow.' \
+            '' \
+            'For a Mac desktop download, run the Codemagic workflow named:' \
+            '  Fortified Command Center Mac Download' \
+            '' \
+            'Then download the standalone .zip / .app artifact (not this web archive).' \
+            > codemagic-web-artifacts/NOT_A_MAC_APP.txt
+          if [ -d .next ]; then
+            cp -R .next codemagic-web-artifacts/next-build
+          fi
+
     artifacts:
-      - .next/**
-      - out/**
-      - build/**
-      - dist/**
+      - codemagic-web-artifacts/**
 
   mac-desktop-app:
     name: Fortified Command Center Mac Download
@@ -71,8 +83,9 @@ workflows:
         NEXT_TELEMETRY_DISABLED: "1"
         NEXT_PUBLIC_DEMO_MODE: "true"
         # Add these values to the mac_desktop_signing secure environment group
-        # before producing public Mac downloads. This workflow fails without
-        # signing and notarization credentials so Gatekeeper can verify artifacts.
+        # before producing public Mac downloads. Signed + notarized builds open
+        # normally on macOS. Without them this workflow still builds unsigned
+        # artifacts (right-click the app → Open the first time).
         # CSC_LINK (Developer ID Application .p12 as base64 or secure file URL)
         # CSC_KEY_PASSWORD
         # APPLE_ID
@@ -96,6 +109,7 @@ workflows:
           node --version
           npm --version
           npm ci
+          chmod +x scripts/prepare-mac-codemagic-artifacts.sh
 
       - name: Build Mac desktop app
         script: |
@@ -135,7 +149,14 @@ workflows:
             exit 1
           fi
 
+          ./scripts/prepare-mac-codemagic-artifacts.sh
           ls -lh dist-desktop
 
+    # Codemagic only exposes some extensions as standalone downloads (zip, app, ...).
+    # Bare .dmg files get wrapped into "*_artifacts.zip", which is what people often
+    # download and then cannot "open" as a Mac app. Publish zip + app first.
     artifacts:
+      - dist-desktop/*.zip
+      - dist-desktop/*.app
       - dist-desktop/*.dmg
+      - dist-desktop/HOW_TO_OPEN_MAC_BUILD.txt
