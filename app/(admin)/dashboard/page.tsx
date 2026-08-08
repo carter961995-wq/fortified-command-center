@@ -165,9 +165,9 @@ export default async function DashboardPage() {
         <DashboardPanel title="Automation Feed" icon={Inbox}>
           <div className="grid gap-3 text-sm">
             {[
-              "Gmail/Workspace connector will watch vendor/customer emails for work requests.",
-              "Gemini extraction will turn messages, PDFs, and photos into draft leads and work orders.",
-              "Phone/text intake will attach conversations and contact details to customer records.",
+              "Connect Gmail + mHelpDesk in Settings, then open Job Intake for assignment parsing.",
+              "Gemini extracts store #, WO #, DNE, location, and timeframe into clean job briefs.",
+              "Approve outbound email drafts before send, or stage mHelpDesk field-mapped updates.",
             ].map((item) => (
               <div className="rounded-lg border border-[#223758] bg-[#0c172b] p-3 text-slate-300" key={item}>{item}</div>
             ))}

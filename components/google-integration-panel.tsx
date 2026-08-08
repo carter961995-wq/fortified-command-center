@@ -18,6 +18,7 @@ type Status = {
     gmail: { messages: unknown[] };
     drive: { files: unknown[] };
     calendar: { events: unknown[] };
+    jobIntake?: { scanned: number; imported: number; updated: number };
     gemini?: { configured: boolean; extraction?: unknown; error?: string };
   };
 };
@@ -126,8 +127,9 @@ export function GoogleIntegrationPanel({ message }: { message?: string }) {
           <div>
             <h3 className="font-black text-white">Workspace sync</h3>
             <p className="mt-1 text-sm text-slate-400">
-              Pulls recent Gmail messages, Drive file metadata, and Calendar events. If Gemini is configured,
-              it also extracts draft leads, work orders, contacts, and invoice tasks.
+              Pulls recent Gmail messages (including job/work-order assignments), Drive file metadata, and Calendar
+              events. Matching jobs are parsed into Job Intake. If Gemini is configured, it also extracts draft leads,
+              work orders, contacts, and invoice tasks.
             </p>
           </div>
           <button
@@ -144,9 +146,10 @@ export function GoogleIntegrationPanel({ message }: { message?: string }) {
         {syncMessage ? <p className="mt-3 text-sm font-semibold text-orange-200">{syncMessage}</p> : null}
 
         {status.lastSync ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-5">
             <Metric label="Last sync" value={new Date(status.lastSync.syncedAt).toLocaleString()} />
             <Metric label="Gmail messages" value={String(status.lastSync.gmail.messages.length)} />
+            <Metric label="Jobs imported" value={String(status.lastSync.jobIntake?.imported ?? 0)} />
             <Metric label="Drive files" value={String(status.lastSync.drive.files.length)} />
             <Metric label="Calendar events" value={String(status.lastSync.calendar.events.length)} />
           </div>
