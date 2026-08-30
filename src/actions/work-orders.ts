@@ -144,3 +144,20 @@ export async function addWorkOrderDocument(formData: FormData): Promise<void> {
   if (error) return;
   revalidatePath(`/work-orders/${work_order_id}`);
 }
+
+export async function addWorkOrderMessage(formData: FormData): Promise<void> {
+  const { supabase } = await requireStaff();
+  const work_order_id = String(formData.get("work_order_id") ?? "");
+  const channel = String(formData.get("channel") ?? "note");
+  const direction = String(formData.get("direction") ?? "outbound");
+  const body = String(formData.get("body") ?? "").trim();
+  if (!work_order_id || !body) return;
+  await supabase.from("work_order_messages").insert({
+    work_order_id,
+    channel,
+    direction,
+    body,
+    created_by: "admin",
+  });
+  revalidatePath(`/work-orders/${work_order_id}`);
+}

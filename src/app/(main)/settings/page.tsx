@@ -1,46 +1,39 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { NationalAccountCards } from "@/components/integrations/national-account-panels";
 
 export const metadata = { title: "Settings" };
 
-export default function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
+  const sp = await searchParams;
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Integrations and company defaults (MVP placeholders).</p>
+        <p className="text-sm text-muted-foreground">
+          National-account intake, Gemini assistant, and company defaults for Fortified Fence &amp; Weld.
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Payments</CardTitle>
-          <CardDescription>Stripe card and ACH capture will connect here.</CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">Reserved for Stripe Checkout / Customer Portal integration.</CardContent>
-      </Card>
+      {sp.google ? (
+        <p className="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm">{sp.google}</p>
+      ) : null}
+
+      <NationalAccountCards />
 
       <Card>
         <CardHeader>
-          <CardTitle>Accounting</CardTitle>
-          <CardDescription>QuickBooks Online export and sync.</CardDescription>
+          <CardTitle>Invoice template</CardTitle>
+          <CardDescription>Fortified commercial invoice PDF is built in. Generate it from any invoice record.</CardDescription>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">Reserved for invoice / payment export and chart-of-accounts mapping.</CardContent>
+        <CardContent className="text-sm text-muted-foreground">
+          The PDF includes company letterhead, customer WO #, PO #, site address, scope, line items, and terms. Open an
+          invoice and choose Generate PDF.
+        </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Notifications</CardTitle>
-          <CardDescription>Email and SMS dispatch rules.</CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">Reserved for transactional email (quotes, invoices) and SMS alerts.</CardContent>
-      </Card>
-
-      <Separator />
-      <p className="text-xs text-muted-foreground">
-        Fortified Work Order Command Center — internal use only. Role expansion (dispatcher, subcontractor portal,
-        customer portal) is supported at the database level via{" "}
-        <code className="rounded bg-muted px-1">users_profile.role</code>.
-      </p>
     </div>
   );
 }
