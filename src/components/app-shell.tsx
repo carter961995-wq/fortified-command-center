@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { CompanyAssistant } from "@/components/company-assistant";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
@@ -48,7 +49,13 @@ export function AppShell({
             </SheetContent>
           </Sheet>
           <span className="ml-3 text-sm font-semibold text-foreground">Command Center</span>
+          <div className="ml-auto">
+            <CompanyAssistant />
+          </div>
         </header>
+        <div className="hidden items-center justify-end border-b border-border bg-card px-6 py-2 lg:flex">
+          <CompanyAssistant />
+        </div>
         {demoMode ? (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
             Demo mode: using seeded in-memory data. Restarting the dev server resets changes.

@@ -607,6 +607,17 @@ const demoDb = {
   ],
   work_order_photos: [],
   work_order_documents: [],
+  work_order_messages: [
+    {
+      id: "msg-0001-0000-4000-8000-000000000001",
+      work_order_id: ids.woA,
+      channel: "email",
+      direction: "outbound",
+      body: "Sent Fortified dispatch packet to 9Line Fence for the Canal Street gate operator. Waiting on schedule confirmation.",
+      created_by: "admin",
+      created_at: "2026-05-12T14:20:00.000Z",
+    },
+  ],
   work_order_financials: [],
 };
 

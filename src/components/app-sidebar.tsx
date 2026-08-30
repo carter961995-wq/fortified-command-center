@@ -8,11 +8,13 @@ import {
   ClipboardList,
   FileSpreadsheet,
   FileText,
+  Inbox,
   LayoutDashboard,
   LogOut,
   MapPin,
   Settings,
   Shield,
+  Tags,
   Users,
   Wrench,
 } from "lucide-react";
@@ -22,7 +24,9 @@ import { Separator } from "@/components/ui/separator";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/job-intake", label: "Job Intake", icon: Inbox },
   { href: "/work-orders", label: "Work Orders", icon: ClipboardList },
+  { href: "/pricing", label: "Pricing", icon: Tags },
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/locations", label: "Locations", icon: MapPin },
   { href: "/subcontractors", label: "Subcontractors", icon: Users },

@@ -9,7 +9,9 @@ import {
   deleteJobCost,
   addWorkOrderPhoto,
   addWorkOrderDocument,
+  addWorkOrderMessage,
 } from "@/actions/work-orders";
+import { DispatchPanel } from "@/components/work-orders/dispatch-panel";
 import { createQuoteFromWorkOrder } from "@/actions/quotes";
 import { createInvoiceFromWorkOrder } from "@/actions/invoices";
 import { uploadWorkOrderFile } from "@/actions/uploads";
@@ -81,7 +83,7 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
   }>(wo.locations);
   const sub = unwrapEmbed<{ id: string; company_name: string }>(wo.subcontractors);
 
-  const [{ data: fin }, { data: costs }, { data: photos }, { data: docs }, { data: quotes }, { data: invoices }] =
+  const [{ data: fin }, { data: costs }, { data: photos }, { data: docs }, { data: quotes }, { data: invoices }, { data: messages }] =
     await Promise.all([
       supabase.from("work_order_financials").select("*").eq("work_order_id", id).maybeSingle(),
       supabase.from("job_costs").select("*, subcontractors(company_name)").eq("work_order_id", id),
@@ -89,6 +91,7 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
       supabase.from("work_order_documents").select("*").eq("work_order_id", id).order("created_at", { ascending: false }),
       supabase.from("quotes").select("*").eq("work_order_id", id).order("created_at", { ascending: false }),
       supabase.from("invoices").select("*").eq("work_order_id", id).order("created_at", { ascending: false }),
+      supabase.from("work_order_messages").select("*").eq("work_order_id", id).order("created_at", { ascending: false }),
     ]);
 
   const { data: subs } = await supabase.from("subcontractors").select("id, company_name").eq("status", "active").order("company_name");
@@ -335,6 +338,60 @@ export default async function WorkOrderDetailPage({ params }: { params: Promise<
               <Button type="submit">Save work order</Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <DispatchPanel workOrderId={id} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Communications</CardTitle>
+          <CardDescription>Emails, texts, and call notes stored on this work order.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form action={addWorkOrderMessage} className="grid gap-3 md:grid-cols-4">
+            <input type="hidden" name="work_order_id" value={id} />
+            <div className="space-y-1">
+              <Label>Channel</Label>
+              <select name="channel" className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm">
+                <option value="note">Note</option>
+                <option value="email">Email</option>
+                <option value="sms">Text</option>
+                <option value="call">Call</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label>Direction</Label>
+              <select name="direction" className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm">
+                <option value="outbound">Outbound</option>
+                <option value="inbound">Inbound</option>
+              </select>
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label>Message</Label>
+              <Textarea name="body" rows={2} required placeholder="Logged the Fortified packet to the sub at 9:14am…" />
+            </div>
+            <div className="md:col-span-4">
+              <Button type="submit" size="sm">
+                Save communication
+              </Button>
+            </div>
+          </form>
+          <Table>
+            <TableBody>
+              {(messages ?? []).map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="w-40 text-xs text-muted-foreground">
+                    {formatDate(row.created_at)}
+                    <div className="capitalize">
+                      {row.direction} {row.channel}
+                    </div>
+                  </TableCell>
+                  <TableCell className="whitespace-pre-wrap text-sm">{row.body}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
