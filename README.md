@@ -111,6 +111,34 @@ Electron Builder's `CSC_LINK` / `CSC_KEY_PASSWORD` names or the GitHub secret-st
 Local desktop builds without these secrets still work for development with `npm run desktop:dist:unsigned`,
 but macOS may require right-clicking the app and choosing **Open** the first time.
 
+### Codemagic Windows download
+
+Use the Codemagic workflow named **Fortified Command Center Windows Download** (not the Web Build
+workflow and not the Mac Download workflow). It runs on a `windows_x2` machine and publishes:
+
+1. A standalone **`.exe`** NSIS installer (preferred)
+2. A standalone **`.zip`** containing `Fortified Command Center.exe`
+3. `HOW_TO_OPEN_WINDOWS_BUILD.txt`
+
+**How to open the download on Windows**
+
+1. Download the `.exe` named like `Fortified Command Center-*-win-x64.exe`
+2. Double-click to install, or unzip the `.zip` and run `Fortified Command Center.exe`
+3. If SmartScreen blocks an unsigned build: **More info → Run anyway**
+4. If you only see `*_artifacts.zip`, unzip it first — the installer is inside
+
+This Windows workflow does not require a signing certificate. Add `CSC_LINK` / `CSC_KEY_PASSWORD`
+later if you want an Authenticode-signed installer.
+
+To build the Windows package on a Windows PC locally:
+
+```bash
+npm install
+npm run desktop:dist:win
+```
+
+The installer and zip are written to `dist-desktop/`.
+
 ## Google Workspace and Gemini connection
 
 Settings includes a one-time **Connect Google** flow. To use it with real Google data:

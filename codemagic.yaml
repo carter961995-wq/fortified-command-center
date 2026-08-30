@@ -61,7 +61,10 @@ workflows:
             'For a Mac desktop download, run the Codemagic workflow named:' \
             '  Fortified Command Center Mac Download' \
             '' \
-            'Then download the standalone .zip / .app artifact (not this web archive).' \
+            'For a Windows desktop download, run the Codemagic workflow named:' \
+            '  Fortified Command Center Windows Download' \
+            '' \
+            'Then download the standalone desktop artifact (not this web archive).' \
             > codemagic-web-artifacts/NOT_A_MAC_APP.txt
           if [ -d .next ]; then
             cp -R .next codemagic-web-artifacts/next-build
@@ -160,3 +163,42 @@ workflows:
       - dist-desktop/*.app
       - dist-desktop/*.dmg
       - dist-desktop/HOW_TO_OPEN_MAC_BUILD.txt
+
+  windows-desktop-app:
+    name: Fortified Command Center Windows Download
+    instance_type: windows_x2
+    max_build_duration: 60
+
+    environment:
+      node: 22
+      vars:
+        NEXT_TELEMETRY_DISABLED: "1"
+        NEXT_PUBLIC_DEMO_MODE: "true"
+        # Optional Authenticode signing (same electron-builder names as Mac):
+        # CSC_LINK / CSC_KEY_PASSWORD in a windows_desktop_signing group.
+        # Without them this workflow still produces an unsigned .exe/.zip.
+        # Windows SmartScreen may then show "More info → Run anyway".
+
+    cache:
+      cache_paths:
+        - ~/.npm
+        - ~/.cache/electron
+        - ~/.cache/electron-builder
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          node --version
+          npm --version
+          npm ci
+
+      - name: Build Windows desktop app
+        script: |
+          npm run desktop:dist:win
+          node scripts/prepare-windows-codemagic-artifacts.mjs
+          node -e "const fs=require('fs'); for (const name of fs.readdirSync('dist-desktop')) console.log(name);"
+
+    artifacts:
+      - dist-desktop/*.exe
+      - dist-desktop/*.zip
+      - dist-desktop/HOW_TO_OPEN_WINDOWS_BUILD.txt

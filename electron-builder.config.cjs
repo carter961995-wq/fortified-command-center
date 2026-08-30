@@ -61,4 +61,21 @@ module.exports = {
     entitlements: "electron/entitlements.mac.plist",
     entitlementsInherit: "electron/entitlements.mac.plist",
   },
+  win: {
+    // Built on Codemagic windows_x2 (or a Windows PC). NSIS is the installer;
+    // zip is the first-class Codemagic download.
+    target: [
+      { target: "nsis", arch: ["x64"] },
+      { target: "zip", arch: ["x64"] },
+    ],
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true,
+    shortcutName: "Fortified Command Center",
+    uninstallDisplayName: "Fortified Command Center",
+  },
 };
