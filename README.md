@@ -116,16 +116,23 @@ but macOS may require right-clicking the app and choosing **Open** the first tim
 Use the Codemagic workflow named **Fortified Command Center Windows Download** (not the Web Build
 workflow and not the Mac Download workflow). It runs on a `windows_x2` machine and publishes:
 
-1. A standalone **`.exe`** NSIS installer (preferred)
-2. A standalone **`.zip`** containing `Fortified Command Center.exe`
+1. A standalone **`.zip`** containing `Install Fortified Command Center.exe` (preferred Codemagic download)
+2. The raw **`.exe`** installer when it appears inside Codemagic's generic `*_artifacts.zip`
 3. `HOW_TO_OPEN_WINDOWS_BUILD.txt`
+
+Codemagic only treats some file types as standalone downloads. A bare `.exe` is packed into a generic
+`*_artifacts.zip`, which is easy to mistake for a broken Windows app. The zip from this workflow is the
+installer, not the unpacked Electron folder.
 
 **How to open the download on Windows**
 
-1. Download the `.exe` named like `Fortified Command Center-*-win-x64.exe`
-2. Double-click to install, or unzip the `.zip` and run `Fortified Command Center.exe`
-3. If SmartScreen blocks an unsigned build: **More info → Run anyway**
-4. If you only see `*_artifacts.zip`, unzip it first — the installer is inside
+1. Download the standalone `.zip` named like `Fortified Command Center-*-win-x64.zip`
+2. Double-click to extract, then double-click **Install Fortified Command Center.exe**
+3. Finish the installer, then open **Fortified Command Center** from the Desktop or Start Menu
+4. If SmartScreen blocks an unsigned build: **More info → Run anyway**
+5. If you only see `*_artifacts.zip`, unzip it first — the installer is inside
+6. First launch shows a dark **Starting local server** screen, then the dashboard. Wait up to a
+   minute. If Windows says "Not responding", leave the window open until the dashboard appears.
 
 This Windows workflow does not require a signing certificate. Add `CSC_LINK` / `CSC_KEY_PASSWORD`
 later if you want an Authenticode-signed installer.
