@@ -14,7 +14,7 @@
     "desktop:dist": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --mac --publish never",
     "desktop:dist:mac": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --mac --publish never",
     "desktop:dist:unsigned": "npm run build && npm run desktop:prepare && ELECTRON_BUILDER_ALLOW_UNSIGNED_MAC=1 electron-builder --config electron-builder.config.cjs --mac --publish never",
-    "desktop:dist:win": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --win --x64 --publish never"
+    "desktop:dist:win": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --win --x64 --publish never && node scripts/prepare-windows-codemagic-artifacts.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

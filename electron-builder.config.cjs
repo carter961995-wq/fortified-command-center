@@ -62,12 +62,11 @@ module.exports = {
     entitlementsInherit: "electron/entitlements.mac.plist",
   },
   win: {
-    // Built on Codemagic windows_x2 (or a Windows PC). NSIS is the installer;
-    // zip is the first-class Codemagic download.
-    target: [
-      { target: "nsis", arch: ["x64"] },
-      { target: "zip", arch: ["x64"] },
-    ],
+    // Built on Codemagic windows_x2 (or a Windows PC). NSIS is the installer.
+    // Codemagic does not list .exe as a standalone artifact (it wraps it into
+    // *_artifacts.zip), so prepare-windows-codemagic-artifacts.mjs zips the
+    // installer for the first-class download.
+    target: [{ target: "nsis", arch: ["x64"] }],
   },
   nsis: {
     oneClick: false,
