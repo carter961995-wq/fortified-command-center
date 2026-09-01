@@ -30,7 +30,9 @@ How to install / open
 5. Windows SmartScreen may warn on an unsigned build:
    - More info → Run anyway
    - Or right-click the file → Properties → Unblock → Apply, then open it
-6. The first launch starts a private local server and opens the dashboard window
+6. The first launch opens a "Starting local server" window, then the dashboard.
+   This can take up to a minute while Windows Defender scans the unsigned app.
+   If Windows says "Not responding", leave it open — do not force-close it yet.
 
 The "Fortified Command Center Web Build" artifacts are not a Windows app.
 `;
