@@ -1,38 +1,16 @@
-import { access, cp, mkdir } from "node:fs/promises";
 import path from "node:path";
+import { copyStandaloneBrowserAssets } from "./lib/standalone-assets.mjs";
 
 const root = process.cwd();
-const standaloneDir = path.join(root, ".next", "standalone");
-const staticDir = path.join(root, ".next", "static");
-const publicDir = path.join(root, "public");
+const result = await copyStandaloneBrowserAssets({
+  standaloneDir: path.join(root, ".next", "standalone"),
+  staticDir: path.join(root, ".next", "static"),
+  publicDir: path.join(root, "public"),
+});
 
-async function exists(target) {
-  try {
-    await access(target);
-    return true;
-  } catch {
-    return false;
-  }
+console.log(
+  `Prepared standalone desktop assets: ${result.cssCount} CSS file(s) copied next to ${result.serverRoots.length} server.js root(s).`,
+);
+for (const serverRoot of result.serverRoots) {
+  console.log(`  - ${path.relative(root, serverRoot) || "."}`);
 }
-
-if (!(await exists(standaloneDir))) {
-  throw new Error("Missing .next/standalone. Run `npm run build` after enabling Next standalone output.");
-}
-
-await mkdir(path.join(standaloneDir, ".next"), { recursive: true });
-
-if (await exists(staticDir)) {
-  await cp(staticDir, path.join(standaloneDir, ".next", "static"), {
-    recursive: true,
-    force: true,
-  });
-}
-
-if (await exists(publicDir)) {
-  await cp(publicDir, path.join(standaloneDir, "public"), {
-    recursive: true,
-    force: true,
-  });
-}
-
-console.log("Prepared .next/standalone for Electron packaging.");

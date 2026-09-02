@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AppShellStyles } from "../components/app-shell-styles";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
@@ -10,7 +11,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <head>
+        <link rel="stylesheet" href="/app-shell.css" />
+      </head>
+      <body className="app-body">
+        <AppShellStyles />
+        {children}
+      </body>
     </html>
   );
 }
