@@ -7,7 +7,7 @@ export function PageHeader({ title, description, action }: { title: string; desc
       <div>
         <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Fence Builders Bible</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-white">{title}</h1>
-        {description ? <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">{description}</p> : null}
+        {description ? <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-200">{description}</p> : null}
       </div>
       {action}
     </div>

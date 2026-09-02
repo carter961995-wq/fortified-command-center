@@ -8,20 +8,22 @@ import {
   ClipboardList,
   FileSpreadsheet,
   FileText,
+  Inbox,
   LayoutDashboard,
   LogOut,
   MapPin,
+  Plug,
   Settings,
   Shield,
   Users,
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Command Center", icon: LayoutDashboard },
+  { href: "/job-intake", label: "Job Intake", icon: Inbox },
+  { href: "/job-sources", label: "Job Sources", icon: Plug },
   { href: "/work-orders", label: "Work Orders", icon: ClipboardList },
   { href: "/customers", label: "Customers", icon: Building2 },
   { href: "/locations", label: "Locations", icon: MapPin },
@@ -40,7 +42,6 @@ export function AppSidebar({
 }: {
   profileName?: string;
   profileEmail?: string;
-  /** When true, sidebar is always visible (e.g. mobile drawer). */
   forceVisible?: boolean;
 }) {
   const pathname = usePathname();
@@ -48,19 +49,15 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
-        "w-60 shrink-0 border-r border-sidebar-border bg-sidebar",
-        forceVisible ? "flex flex-col" : "hidden lg:flex lg:flex-col"
+        "w-[240px] shrink-0 border-r border-slate-700 bg-[#07111f]",
+        forceVisible ? "flex flex-col" : "hidden md:flex md:flex-col",
       )}
     >
-      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
-        <div className="flex flex-col">
-          <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-primary">
-            Fortified Fence & Weld
-          </span>
-          <span className="text-sm font-semibold text-sidebar-foreground">Work Order Command</span>
-        </div>
+      <div className="border-b border-slate-700 px-4 py-4">
+        <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">Fortified Fence & Weld</p>
+        <p className="mt-1 text-base font-black text-white">Command Center</p>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 p-3">
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
@@ -69,34 +66,28 @@ export function AppSidebar({
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg border-l-2 px-3 py-2.5 text-sm font-bold",
                 active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                  ? "border-orange-400 bg-orange-500/15 text-orange-200"
+                  : "border-transparent text-slate-200 hover:bg-slate-800 hover:text-white",
               )}
             >
-              <Icon className="size-4 shrink-0 opacity-80" />
+              <Icon className="size-4 shrink-0" />
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <div className="border-t border-sidebar-border p-3">
-        <div className="mb-2 truncate px-1 text-xs text-sidebar-foreground/70">
-          <div className="truncate font-medium text-sidebar-foreground">{profileName}</div>
+      <div className="border-t border-slate-700 p-3">
+        <div className="mb-2 truncate px-1 text-xs text-slate-300">
+          <div className="truncate font-bold text-white">{profileName}</div>
           <div className="truncate">{profileEmail}</div>
         </div>
-        <Separator className="mb-2 bg-sidebar-border" />
         <form action={signOut}>
-          <Button
-            type="submit"
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent"
-          >
+          <button type="submit" className="app-btn app-btn-secondary w-full justify-start">
             <LogOut className="size-4" />
             Sign out
-          </Button>
+          </button>
         </form>
       </div>
     </aside>

@@ -70,7 +70,7 @@ export default async function WorkOrdersPage({
         <CardContent>
           <form className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
             <Input name="q" placeholder="WO # or title…" defaultValue={sp.q ?? ""} />
-            <select name="status" defaultValue={sp.status ?? ""} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm">
+            <select name="status" defaultValue={sp.status ?? ""} className="h-10 rounded-lg border border-slate-500 bg-[#0b1524] px-2 text-sm font-semibold text-white">
               <option value="">Any status</option>
               {[
                 "New",
@@ -95,7 +95,7 @@ export default async function WorkOrdersPage({
                 </option>
               ))}
             </select>
-            <select name="customer_id" defaultValue={sp.customer_id ?? ""} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm">
+            <select name="customer_id" defaultValue={sp.customer_id ?? ""} className="h-10 rounded-lg border border-slate-500 bg-[#0b1524] px-2 text-sm font-semibold text-white">
               <option value="">Any customer</option>
               {(customers ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
@@ -104,14 +104,14 @@ export default async function WorkOrdersPage({
               ))}
             </select>
             <Input name="trade" placeholder="Trade type" defaultValue={sp.trade ?? ""} />
-            <select name="priority" defaultValue={sp.priority ?? ""} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm">
+            <select name="priority" defaultValue={sp.priority ?? ""} className="h-10 rounded-lg border border-slate-500 bg-[#0b1524] px-2 text-sm font-semibold text-white">
               <option value="">Any priority</option>
               <option value="low">Low</option>
               <option value="normal">Normal</option>
               <option value="urgent">Urgent</option>
               <option value="emergency">Emergency</option>
             </select>
-            <select name="sub_id" defaultValue={sp.sub_id ?? ""} className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm md:col-span-2">
+            <select name="sub_id" defaultValue={sp.sub_id ?? ""} className="h-10 rounded-lg border border-slate-500 bg-[#0b1524] px-2 text-sm font-semibold text-white md:col-span-2">
               <option value="">Any subcontractor</option>
               {(subs ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
@@ -120,9 +120,9 @@ export default async function WorkOrdersPage({
               ))}
             </select>
             <div className="md:col-span-3 lg:col-span-4 flex gap-2">
-              <Button type="submit" size="sm" variant="secondary">
+              <button type="submit" className="app-btn app-btn-primary">
                 Apply filters
-              </Button>
+              </button>
             </div>
           </form>
         </CardContent>

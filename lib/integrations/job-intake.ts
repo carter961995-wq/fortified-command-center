@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-export type JobIntakeSource = "gmail" | "mhelpdesk" | "manual";
+export type JobIntakeSource = "gmail" | "mhelpdesk" | "truesource" | "manual";
 
 export type JobIntakeStatus = "new" | "reviewed" | "tracked" | "dismissed";
 
@@ -85,7 +85,7 @@ export type JobIntakeStore = {
 };
 
 const JOB_EMAIL_HINTS =
-  /\b(work\s*order|wo[#:\s-]|job\s*assigned|new\s*job|service\s*request|dispatch|store\s*#|dne|n\.?t\.?e\.?|not\s*to\s*exceed|mhelp|mhelpdesk|ticket\s*#)\b/i;
+  /\b(work\s*order|wo[#:\s-]|job\s*assigned|new\s*job|service\s*request|dispatch|store\s*#|dne|n\.?t\.?e\.?|not\s*to\s*exceed|mhelp|mhelpdesk|truesource|affiliate connect|ticket\s*#)\b/i;
 
 function integrationDir() {
   return (

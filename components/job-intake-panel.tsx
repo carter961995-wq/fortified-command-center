@@ -39,7 +39,7 @@ type ParsedJobFields = {
 type JobIntakeRecord = {
   id: string;
   status: "new" | "reviewed" | "tracked" | "dismissed";
-  source: "gmail" | "mhelpdesk" | "manual";
+  source: "gmail" | "mhelpdesk" | "truesource" | "manual";
   sourceRef: string;
   receivedAt: string;
   subject?: string;

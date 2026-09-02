@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Menu } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 export function AppShell({
@@ -20,38 +20,34 @@ export function AppShell({
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-[#0b1524] text-slate-50">
       <AppSidebar profileName={profileName} profileEmail={profileEmail} />
-      <div className="flex min-h-0 flex-1 flex-col">
-        <header className="flex h-14 items-center border-b border-border bg-card px-4 lg:hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex h-14 items-center gap-3 border-b border-slate-700 bg-[#07111f] px-4 md:hidden">
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger
               render={
-                <Button variant="outline" size="sm" className="gap-2">
+                <button type="button" className="app-btn app-btn-secondary">
                   <Menu className="size-4" />
                   Menu
-                </Button>
+                </button>
               }
             />
-            <SheetContent side="left" className="w-64 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground">
-              <div className="flex h-full flex-col">
-                <div className="border-b border-sidebar-border p-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-primary">
-                    Fortified Fence & Weld
-                  </span>
-                  <div className="text-sm font-semibold">Work Order Command</div>
-                </div>
-                <div className="flex-1 overflow-auto" onClick={() => setOpen(false)}>
-                  <AppSidebar forceVisible profileName={profileName} profileEmail={profileEmail} />
-                </div>
+            <SheetContent side="left" className="w-64 border-slate-700 bg-[#07111f] p-0 text-white">
+              <div className="flex h-full flex-col" onClick={() => setOpen(false)}>
+                <AppSidebar forceVisible profileName={profileName} profileEmail={profileEmail} />
               </div>
             </SheetContent>
           </Sheet>
-          <span className="ml-3 text-sm font-semibold text-foreground">Command Center</span>
+          <span className="font-black text-white">Command Center</span>
         </header>
         {demoMode ? (
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-            Demo mode: using seeded in-memory data. Restarting the dev server resets changes.
+          <div className="border-b border-orange-400/30 bg-orange-500/15 px-4 py-2 text-sm font-semibold text-orange-100">
+            Demo mode with seeded jobs.{" "}
+            <Link href="/job-sources" className="underline">
+              Set up mHelpDesk or TrueSource
+            </Link>{" "}
+            when you want live intake.
           </div>
         ) : null}
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">{children}</main>

@@ -6,25 +6,25 @@
   :root {
     --radius: 0.5rem;
     --radius-md: 0.5rem;
-    --background: 222 47% 11%;
+    --background: 218 52% 9%;
     --foreground: 210 40% 98%;
-    --card: 217 33% 17%;
+    --card: 217 40% 12%;
     --card-foreground: 210 40% 98%;
-    --popover: 217 33% 17%;
+    --popover: 217 40% 12%;
     --popover-foreground: 210 40% 98%;
-    --primary: 211 84% 55%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 22%;
+    --primary: 24 95% 53%;
+    --primary-foreground: 20 14% 10%;
+    --secondary: 217 33% 18%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 22%;
-    --muted-foreground: 215 20% 70%;
-    --accent: 217 33% 24%;
-    --accent-foreground: 210 40% 98%;
+    --muted: 217 33% 18%;
+    --muted-foreground: 213 27% 84%;
+    --accent: 24 80% 20%;
+    --accent-foreground: 24 95% 85%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 26%;
-    --input: 217 33% 26%;
-    --ring: 211 84% 55%;
+    --border: 215 25% 32%;
+    --input: 215 25% 22%;
+    --ring: 24 95% 53%;
     --chart-1: 211 84% 55%;
     --chart-2: 173 58% 45%;
     --chart-3: 280 65% 60%;
@@ -46,6 +46,64 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  select,
+  option {
+    background-color: #0b1524;
+    color: #f8fafc;
+  }
+}
+
+@layer components {
+  .app-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-bold transition;
+  }
+
+  .app-btn-primary {
+    @apply bg-orange-500 text-slate-950 hover:bg-orange-400;
+  }
+
+  .app-btn-secondary {
+    @apply border border-slate-500 bg-slate-800 text-white hover:border-orange-300 hover:bg-slate-700;
+  }
+
+  .app-field {
+    @apply grid gap-1 text-xs font-bold uppercase tracking-wide text-slate-300;
+  }
+
+  .app-field input,
+  .app-field select,
+  .app-field textarea {
+    @apply min-h-10 rounded-lg border border-slate-500 bg-[#0b1524] px-3 py-2 text-sm font-semibold normal-case text-white outline-none focus:border-orange-400;
+  }
+
+  .panel {
+    @apply overflow-hidden rounded-xl border border-slate-600 bg-[#101b2d];
+  }
+
+  .queue-card {
+    @apply rounded-xl border border-slate-600 bg-[#101b2d] p-5 transition hover:border-orange-400 hover:bg-[#162338];
+  }
+
+  .source-card {
+    @apply flex items-center gap-3 rounded-xl border border-slate-600 bg-[#101b2d] p-4 transition hover:border-orange-400;
+  }
+
+  .job-row {
+    @apply flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-800/80;
+  }
+
+  .status-pill {
+    @apply rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wide;
+  }
+
+  .status-pill-on {
+    @apply bg-emerald-500/20 text-emerald-200;
+  }
+
+  .status-pill-off {
+    @apply bg-slate-700 text-slate-200;
   }
 }
 

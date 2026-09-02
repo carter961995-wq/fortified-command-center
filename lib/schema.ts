@@ -414,6 +414,7 @@ export const navItems = [
   { href: "/planner", label: "Planner" },
   { href: "/leads", label: "Leads" },
   { href: "/job-intake", label: "Job Intake" },
+  { href: "/job-sources", label: "Job Sources" },
   { href: "/email-inbox", label: "Email Inbox" },
   { href: "/clients", label: "Clients" },
   { href: "/jobs", label: "Jobs" },

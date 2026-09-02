@@ -1,11 +1,10 @@
 import { Suspense } from "react";
 import { requireStaff } from "@/lib/require-staff";
-import {
-  PremiumDashboard,
-  PremiumDashboardFallback,
-  type DashboardInvoice,
-  type DashboardWorkOrder,
-} from "@/components/premium-dashboard";
+import { CommandDashboard } from "@/components/command-dashboard";
+import { PremiumDashboardFallback, type DashboardInvoice, type DashboardWorkOrder } from "@/components/premium-dashboard";
+import { loadMhelpdeskConnection } from "../../../../lib/integrations/mhelpdesk";
+import { loadTruesourceConnection } from "../../../../lib/integrations/truesource";
+import { loadGoogleConnection } from "../../../../lib/integrations/google";
 import { endOfMonth, format, startOfMonth } from "date-fns";
 
 export const metadata = {
@@ -142,8 +141,14 @@ async function DashboardContent() {
   const margin =
     revenueMonth > 0 ? Math.round((grossProfitMonth / revenueMonth) * 10000) / 100 : 0;
 
+  const [mhelpdesk, truesource, gmail] = await Promise.all([
+    loadMhelpdeskConnection(),
+    loadTruesourceConnection(),
+    loadGoogleConnection(),
+  ]);
+
   return (
-    <PremiumDashboard
+    <CommandDashboard
       metrics={{
         openWorkOrders: openWo.count ?? 0,
         needQuotes: needQuotes.count ?? 0,
@@ -164,6 +169,11 @@ async function DashboardContent() {
       recentWorkOrders={(recentWo.data ?? []) as DashboardWorkOrder[]}
       scheduledWorkOrders={(scheduledWo.data ?? []) as DashboardWorkOrder[]}
       attentionInvoices={(attentionInvoices.data ?? []) as DashboardInvoice[]}
+      sources={{
+        mhelpdesk: { connected: Boolean(mhelpdesk), email: mhelpdesk?.email, lastSyncAt: mhelpdesk?.lastSyncAt },
+        truesource: { connected: Boolean(truesource), email: truesource?.email, lastSyncAt: truesource?.lastSyncAt },
+        gmail: { connected: Boolean(gmail), email: gmail?.email },
+      }}
     />
   );
 }

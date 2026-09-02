@@ -7,7 +7,7 @@ import { SidebarNav } from "./sidebar-nav";
 export function AdminShell({ children, profile, envWarning }: { children: React.ReactNode; profile?: PlainRow | null; envWarning?: string }) {
   return (
     <div className="min-h-screen bg-[#081326] text-slate-100">
-      <aside className="fixed inset-y-0 left-0 hidden w-[230px] border-r border-[#1c2b45] bg-[#060d1d] text-white shadow-2xl lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[240px] border-r border-[#1c2b45] bg-[#060d1d] text-white shadow-2xl md:block">
         <div className="border-b border-[#17243c] p-4">
           <Link href="/dashboard" className="block overflow-hidden rounded-lg border border-[#1e3152] bg-[#101d34] shadow-[0_16px_50px_rgba(0,0,0,0.35)]">
             <div className="relative h-24 bg-[radial-gradient(circle_at_30%_15%,rgba(251,146,60,0.45),transparent_28%),linear-gradient(135deg,#1a2d4f,#080f21_60%,#3a1f0d)] p-3">
@@ -33,8 +33,8 @@ export function AdminShell({ children, profile, envWarning }: { children: React.
           </form>
         </div>
       </aside>
-      <div className="lg:pl-[230px]">
-        <header className="sticky top-0 z-20 border-b border-[#1c2b45] bg-[#060d1d]/95 px-4 py-3 backdrop-blur lg:hidden">
+      <div className="md:pl-[240px]">
+        <header className="sticky top-0 z-20 border-b border-[#1c2b45] bg-[#060d1d]/95 px-4 py-3 backdrop-blur md:hidden">
           <div className="flex items-center justify-between gap-3">
             <Link className="font-black text-orange-400" href="/dashboard">Fence Builders Bible</Link>
             <form action={signOutAction}><button className="text-sm font-bold text-orange-400">Sign out</button></form>

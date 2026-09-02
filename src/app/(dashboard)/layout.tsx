@@ -1,18 +1,21 @@
-import { AppSidebar } from "@/components/app-sidebar";
-import { Toaster } from "@/components/ui/sonner";
+import { AppShell } from "@/components/app-shell";
+import { requireStaff } from "@/lib/require-staff";
+import { isDemoMode } from "@/lib/demo-mode";
 
-export default function DashboardLayout({
+export default async function DashboardLegacyLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { profile } = await requireStaff();
+
   return (
-    <div className="flex h-screen overflow-hidden">
-      <AppSidebar />
-      <main className="flex-1 overflow-y-auto bg-gray-50">
-        <div className="container max-w-7xl mx-auto p-6">{children}</div>
-      </main>
-      <Toaster />
-    </div>
+    <AppShell
+      profileName={profile.full_name || profile.email || "User"}
+      profileEmail={profile.email}
+      demoMode={isDemoMode()}
+    >
+      {children}
+    </AppShell>
   );
 }
