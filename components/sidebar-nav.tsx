@@ -15,6 +15,7 @@ import {
   Mail,
   Map,
   NotebookPen,
+  Plug,
   ReceiptText,
   Ruler,
   Settings,
@@ -27,6 +28,7 @@ const navIcons = {
   Planner: CalendarDays,
   Leads: Inbox,
   "Job Intake": ClipboardList,
+  "Job Sources": Plug,
   "Email Inbox": Mail,
   Clients: Users,
   Jobs: BriefcaseBusiness,
@@ -49,7 +51,7 @@ export function SidebarNav({ mobile = false }: { mobile?: boolean }) {
       <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
         {navItems.map((item) => (
           <Link
-            className="shrink-0 rounded-full bg-[#13213a] px-3 py-1 text-xs font-bold text-slate-300"
+            className="shrink-0 rounded-full bg-[#13213a] px-3 py-1 text-xs font-bold text-slate-100"
             href={item.href}
             key={item.href}
           >
@@ -71,7 +73,7 @@ export function SidebarNav({ mobile = false }: { mobile?: boolean }) {
             className={`flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-bold transition ${
               active
                 ? "border-orange-500 bg-orange-500/10 text-orange-400"
-                : "border-transparent text-slate-400 hover:bg-[#111c31] hover:text-white"
+                : "border-transparent text-slate-200 hover:bg-[#111c31] hover:text-white"
             }`}
             href={item.href}
           >
