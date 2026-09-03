@@ -48,6 +48,7 @@ module.exports = {
     {
       from: ".next/standalone",
       to: "app",
+      filter: ["**/*", "!**/*.map"],
     },
   ],
   mac: {

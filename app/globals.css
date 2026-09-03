@@ -116,3 +116,14 @@ button, .button-like { font: inherit; }
   background-image: linear-gradient(rgba(120, 53, 15, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(120, 53, 15, 0.08) 1px, transparent 1px);
   background-size: 28px 28px;
 }
+
+.app-shell { display: flex; min-height: 100vh; }
+.app-sidebar { display: none; width: 240px; flex-shrink: 0; flex-direction: column; }
+.app-content { flex: 1; min-width: 0; }
+.app-nav { display: grid; gap: 0.25rem; }
+.app-nav-link { display: flex; align-items: center; gap: 0.7rem; }
+
+@media (min-width: 768px) {
+  .app-sidebar { display: flex; position: sticky; top: 0; height: 100vh; }
+  .app-mobile-bar { display: none; }
+}

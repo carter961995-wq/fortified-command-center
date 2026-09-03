@@ -48,10 +48,10 @@ export function SidebarNav({ mobile = false }: { mobile?: boolean }) {
 
   if (mobile) {
     return (
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+      <div className="app-mobile-nav mt-3 flex gap-2 overflow-x-auto pb-1">
         {navItems.map((item) => (
           <Link
-            className="shrink-0 rounded-full bg-[#13213a] px-3 py-1 text-xs font-bold text-slate-100"
+            className="app-chip shrink-0 rounded-full bg-[#13213a] px-3 py-1 text-xs font-bold text-slate-100"
             href={item.href}
             key={item.href}
           >
@@ -63,19 +63,20 @@ export function SidebarNav({ mobile = false }: { mobile?: boolean }) {
   }
 
   return (
-    <nav className="grid gap-1 overflow-y-auto px-3 py-4">
+    <nav className="app-nav grid gap-1 overflow-y-auto px-3 py-4">
       {navItems.map((item) => {
         const Icon = navIcons[item.label as keyof typeof navIcons] ?? Folder;
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}
-            className={`flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-bold transition ${
+            className={`app-nav-link flex items-center gap-3 rounded-md border-l-2 px-3 py-2.5 text-sm font-bold transition ${
               active
-                ? "border-orange-500 bg-orange-500/10 text-orange-400"
+                ? "is-active border-orange-500 bg-orange-500/10 text-orange-400"
                 : "border-transparent text-slate-200 hover:bg-[#111c31] hover:text-white"
             }`}
             href={item.href}
+            aria-current={active ? "page" : undefined}
           >
             <Icon className="size-4 shrink-0" />
             <span>{item.label}</span>
