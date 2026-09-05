@@ -1,11 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { getSupabaseEnv, isSupabaseConfigured } from "./lib/env";
+import { getSupabaseEnv, isDemoMode, isSupabaseConfigured } from "./lib/env";
 
-const publicPaths = ["/login"];
+const publicPaths = ["/login", "/api/health"];
+
+function isLaunchPublic(pathname: string) {
+  return (
+    pathname === "/api/health" ||
+    pathname === "/app-shell.css" ||
+    pathname.startsWith("/_next/")
+  );
+}
 
 export async function proxy(request: NextRequest) {
-  if (!isSupabaseConfigured()) return NextResponse.next();
+  if (isLaunchPublic(request.nextUrl.pathname) || isDemoMode() || !isSupabaseConfigured()) {
+    return NextResponse.next();
+  }
 
   let response = NextResponse.next({ request });
   const { url, anonKey } = getSupabaseEnv();
@@ -39,5 +49,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|app-shell.css|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
 };

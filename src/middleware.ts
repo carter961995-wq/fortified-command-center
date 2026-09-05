@@ -2,9 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isDemoMode } from "@/lib/demo-mode";
 
-const PUBLIC_PREFIXES = ["/login"];
+const PUBLIC_PREFIXES = ["/login", "/api/health"];
 
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname === "/api/health" || request.nextUrl.pathname === "/app-shell.css") {
+    return NextResponse.next();
+  }
+
   if (isDemoMode()) {
     if (request.nextUrl.pathname === "/login") {
       const url = request.nextUrl.clone();
@@ -84,5 +88,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|app-shell.css).*)"],
 };
