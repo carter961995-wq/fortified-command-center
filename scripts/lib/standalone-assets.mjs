@@ -99,3 +99,51 @@ export async function copyStandaloneBrowserAssets({ standaloneDir, staticDir, pu
     cssCount: cssFiles.length,
   };
 }
+
+async function findNextModuleDir(dir) {
+  const direct = path.join(dir, "node_modules", "next");
+  if (await pathExists(direct)) return path.join(dir, "node_modules");
+
+  const serverRoots = await findStandaloneServerRoots(dir);
+  for (const root of [dir, ...serverRoots]) {
+    let current = root;
+    while (true) {
+      const candidate = path.join(current, "node_modules");
+      if (await pathExists(path.join(candidate, "next"))) return candidate;
+      if (current === dir) break;
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  return null;
+}
+
+export async function copyStandaloneNodeModules(standaloneDir) {
+  const sourceModules = await findNextModuleDir(standaloneDir);
+  if (!sourceModules) {
+    throw new Error(
+      `Standalone output is missing node_modules/next under ${standaloneDir}. The packaged desktop app would fail to start.`,
+    );
+  }
+
+  const serverRoots = await findStandaloneServerRoots(standaloneDir);
+  const targets = serverRoots.length > 0 ? serverRoots : [standaloneDir];
+  const copied = [];
+
+  for (const root of targets) {
+    const dest = path.join(root, "node_modules");
+    if (!(await pathExists(path.join(dest, "next")))) {
+      await cp(sourceModules, dest, { recursive: true, force: true });
+      copied.push(dest);
+    }
+  }
+
+  for (const root of targets) {
+    if (!(await pathExists(path.join(root, "node_modules", "next")))) {
+      throw new Error(`Failed to place Next.js modules next to standalone server at ${root}`);
+    }
+  }
+
+  return { serverRoots: targets, copied, sourceModules };
+}

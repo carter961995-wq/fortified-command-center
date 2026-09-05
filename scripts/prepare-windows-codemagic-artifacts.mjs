@@ -31,8 +31,10 @@ How to install / open
    - More info → Run anyway
    - Or right-click the file → Properties → Unblock → Apply, then open it
 6. The first launch opens a "Starting local server" window, then the dashboard.
-   This can take up to a minute while Windows Defender scans the unsigned app.
+   This can take a couple of minutes while Windows Defender scans the unsigned app.
    If Windows says "Not responding", leave it open — do not force-close it yet.
+   If you see "failed to start", choose Retry. The log is at:
+   %APPDATA%\\Fortified Command Center\\desktop-server.log
 
 The "Fortified Command Center Web Build" artifacts are not a Windows app.
 `;

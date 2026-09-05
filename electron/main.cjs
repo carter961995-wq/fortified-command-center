@@ -1,13 +1,26 @@
-const { app, BrowserWindow, dialog } = require("electron");
+const { app, BrowserWindow, dialog, shell } = require("electron");
 const { spawn } = require("child_process");
 const fs = require("fs");
-const http = require("http");
-const net = require("net");
 const path = require("path");
+const {
+  PREFERRED_PORT,
+  asErrorMessage,
+  resolveStandaloneRoot,
+  inspectStandaloneRoot,
+  createNodeShim,
+  buildServerEnv,
+  chooseListenPort,
+  waitForHttpReady,
+  healthUrl,
+  dashboardUrl,
+  looksLikeAddressInUse,
+  formatStartupError,
+} = require("./desktop-launch.cjs");
 
 let serverProcess = null;
 let mainWindow = null;
 let logStream = null;
+let logPath = null;
 let serverReady = false;
 
 if (process.platform === "win32") {
@@ -25,7 +38,7 @@ function log(message) {
 
 function openLog() {
   try {
-    const logPath = path.join(app.getPath("userData"), "desktop-server.log");
+    logPath = path.join(app.getPath("userData"), "desktop-server.log");
     logStream = fs.createWriteStream(logPath, { flags: "a" });
     log(`Log file: ${logPath}`);
   } catch (error) {
@@ -41,88 +54,6 @@ function setSplashStatus(message, detail) {
   mainWindow.webContents.executeJavaScript(script).catch(() => {});
 }
 
-function getFreePort(preferredPort) {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on("error", (error) => {
-      if (preferredPort) {
-        getFreePort().then(resolve).catch(reject);
-        return;
-      }
-      reject(error);
-    });
-    server.listen(preferredPort || 0, "127.0.0.1", () => {
-      const address = server.address();
-      server.close(() => {
-        if (!address || typeof address === "string") {
-          reject(new Error("Could not allocate a local port."));
-          return;
-        }
-        resolve(address.port);
-      });
-    });
-  });
-}
-
-function waitForServer(url, attempts = 90) {
-  return new Promise((resolve, reject) => {
-    let remaining = attempts;
-    const startedAt = Date.now();
-
-    function tryRequest() {
-      const elapsed = Math.round((Date.now() - startedAt) / 1000);
-      setSplashStatus("Starting local server…", `This can take up to a minute on first launch (${elapsed}s).`);
-
-      const request = http.get(url, { timeout: 2500 }, (response) => {
-        response.resume();
-        resolve();
-      });
-
-      request.on("timeout", () => {
-        request.destroy();
-        retry();
-      });
-
-      request.on("error", () => {
-        retry();
-      });
-    }
-
-    function retry() {
-      remaining -= 1;
-      if (remaining <= 0) {
-        reject(new Error(`Timed out waiting for ${url}`));
-        return;
-      }
-      setTimeout(tryRequest, 500);
-    }
-
-    tryRequest();
-  });
-}
-
-function resolveStandaloneRoot() {
-  const root = path.join(process.resourcesPath, "app");
-  if (fs.existsSync(path.join(root, "server.js"))) {
-    return root;
-  }
-
-  try {
-    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-      if (!entry.isDirectory()) continue;
-      const nested = path.join(root, entry.name);
-      if (fs.existsSync(path.join(nested, "server.js"))) {
-        return nested;
-      }
-    }
-  } catch (error) {
-    log(`Could not scan standalone app folder: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  return root;
-}
-
 function stopServerProcess() {
   if (!serverProcess || serverProcess.killed) {
     return;
@@ -130,6 +61,7 @@ function stopServerProcess() {
 
   const child = serverProcess;
   serverProcess = null;
+  serverReady = false;
 
   if (process.platform === "win32" && child.pid) {
     spawn("taskkill", ["/pid", String(child.pid), "/f", "/t"], {
@@ -142,92 +74,143 @@ function stopServerProcess() {
   child.kill();
 }
 
-async function startBundledNextServer() {
-  const preferredPort = Number(process.env.FORTIFIED_DESKTOP_PORT || 43111);
-  const port = await getFreePort(preferredPort);
-  const appRoot = resolveStandaloneRoot();
-  const serverPath = path.join(appRoot, "server.js");
-  const userDataDir = app.getPath("userData");
-
-  if (!fs.existsSync(serverPath)) {
-    throw new Error(`Packaged server file is missing:\n${serverPath}`);
-  }
+function spawnBundledServer({ appRoot, serverPath, port, userDataDir, shimDir }) {
+  const env = buildServerEnv({
+    processEnv: process.env,
+    port,
+    userDataDir,
+    execPath: process.execPath,
+    shimDir,
+    appRoot,
+    preferredPort: PREFERRED_PORT,
+  });
 
   log(`Starting bundled server from ${serverPath} on 127.0.0.1:${port}`);
-  setSplashStatus("Starting local server…", "Loading the dashboard runtime.");
+  log(`Server folder listing: ${inspectStandaloneRoot(appRoot).listing.join(", ") || "(empty)"}`);
 
-  let stderrTail = "";
-  serverReady = false;
-
-  serverProcess = spawn(process.execPath, [serverPath], {
+  const child = spawn(process.execPath, [serverPath], {
     cwd: appRoot,
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: "1",
-      ELECTRON_NO_ATTACH_CONSOLE: "1",
-      NODE_ENV: "production",
-      NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE ?? "true",
-      FORTIFIED_USER_DATA_DIR: userDataDir,
-      GOOGLE_REDIRECT_URI:
-        process.env.GOOGLE_REDIRECT_URI ||
-        (port === preferredPort ? `http://127.0.0.1:${preferredPort}/api/integrations/google/callback` : ""),
-      HOST: "127.0.0.1",
-      HOSTNAME: "127.0.0.1",
-      PORT: String(port),
-    },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
   });
 
-  const capture = (chunk, writer) => {
-    const text = chunk.toString();
-    writer(text.trim());
-    stderrTail = `${stderrTail}${text}`.slice(-4000);
-  };
+  return child;
+}
 
-  serverProcess.stdout.on("data", (chunk) => capture(chunk, (text) => log(`[next] ${text}`)));
-  serverProcess.stderr.on("data", (chunk) => capture(chunk, (text) => log(`[next:err] ${text}`)));
+async function startBundledNextServer() {
+  const appRoot = resolveStandaloneRoot(process.resourcesPath);
+  const inspect = inspectStandaloneRoot(appRoot);
+  if (inspect.missing.length > 0) {
+    throw new Error(inspect.missing.join("\n\n"));
+  }
 
-  const url = `http://127.0.0.1:${port}`;
-
-  await new Promise((resolve, reject) => {
-    let settled = false;
-
-    const succeed = () => {
-      if (settled) return;
-      settled = true;
-      serverReady = true;
-      resolve();
-    };
-
-    const fail = (error) => {
-      if (settled) return;
-      settled = true;
-      reject(error);
-    };
-
-    serverProcess.on("error", fail);
-    serverProcess.on("exit", (code) => {
-      if (!serverReady) {
-        fail(
-          new Error(
-            `The local app server exited before it was ready (code ${code}).${stderrTail ? `\n\n${stderrTail}` : ""}`,
-          ),
-        );
-        return;
-      }
-      if (code !== 0 && mainWindow && !mainWindow.isDestroyed()) {
-        dialog.showErrorBox(
-          "Fortified Command Center stopped",
-          "The local app server stopped unexpectedly. Close the app and open it again.",
-        );
-      }
-    });
-
-    waitForServer(url).then(succeed).catch(fail);
+  const userDataDir = app.getPath("userData");
+  const shim = createNodeShim({
+    binDir: path.join(userDataDir, "bin"),
+    execPath: process.execPath,
   });
+  const selected = await chooseListenPort(PREFERRED_PORT);
+  const origin = `http://127.0.0.1:${selected.port}`;
 
-  return url;
+  if (selected.reused) {
+    log(`Reusing an already-running local server at ${origin}`);
+    setSplashStatus("Connecting…", origin);
+    return origin;
+  }
+
+  setSplashStatus("Starting local server…", "Loading the dashboard runtime.");
+  serverReady = false;
+
+  let lastPort = selected.port;
+  let lastInspect = inspect;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const port = attempt === 0 ? selected.port : (await chooseListenPort(PREFERRED_PORT + attempt)).port;
+    lastPort = port;
+    let stderrTail = "";
+    const child = spawnBundledServer({
+      appRoot,
+      serverPath: inspect.serverPath,
+      port,
+      userDataDir,
+      shimDir: shim.binDir,
+    });
+    serverProcess = child;
+
+    const capture = (chunk, writer) => {
+      const text = chunk.toString();
+      writer(text.trim());
+      stderrTail = `${stderrTail}${text}`.slice(-4000);
+    };
+
+    child.stdout.on("data", (chunk) => capture(chunk, (text) => log(`[next] ${text}`)));
+    child.stderr.on("data", (chunk) => capture(chunk, (text) => log(`[next:err] ${text}`)));
+
+    try {
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const succeed = () => {
+          if (settled) return;
+          settled = true;
+          serverReady = true;
+          resolve();
+        };
+        const fail = (error) => {
+          if (settled) return;
+          settled = true;
+          reject(error);
+        };
+
+        child.on("error", fail);
+        child.on("exit", (code) => {
+          if (!serverReady) {
+            fail(
+              new Error(
+                `The local app server exited before it was ready (code ${code}).${stderrTail ? `\n\n${stderrTail}` : ""}`,
+              ),
+            );
+          } else if (code !== 0 && mainWindow && !mainWindow.isDestroyed()) {
+            dialog.showErrorBox(
+              "Fortified Command Center stopped",
+              "The local app server stopped unexpectedly. Close the app and open it again.",
+            );
+          }
+        });
+
+        waitForHttpReady(healthUrl(`http://127.0.0.1:${port}`), {
+          onAttempt: ({ elapsedMs }) => {
+            const seconds = Math.round(elapsedMs / 1000);
+            setSplashStatus(
+              "Starting local server…",
+              `First launch can take a couple of minutes while Windows scans the app (${seconds}s).`,
+            );
+          },
+        }).then(succeed).catch(fail);
+      });
+
+      return `http://127.0.0.1:${port}`;
+    } catch (error) {
+      lastError = error;
+      lastInspect = inspectStandaloneRoot(appRoot);
+      const message = asErrorMessage(error);
+      log(`Server start attempt ${attempt + 1} failed: ${message}`);
+      stopServerProcess();
+      if (looksLikeAddressInUse(message) && attempt < 4) {
+        continue;
+      }
+      break;
+    }
+  }
+
+  throw new Error(
+    formatStartupError({
+      message: asErrorMessage(lastError) || `Could not start the local server on port ${lastPort}.`,
+      logPath,
+      inspect: lastInspect,
+    }),
+  );
 }
 
 function createWindow() {
@@ -267,48 +250,76 @@ function createWindow() {
   });
 }
 
-async function showStartupError(error) {
-  const message = error instanceof Error ? error.message : String(error);
+function showStartupError(error) {
+  const message = asErrorMessage(error);
   log(`Startup failed: ${message}`);
   setSplashStatus("Could not start Command Center", message);
 
+  const detail = `${message}${logPath ? `\n\nLog file:\n${logPath}` : ""}`;
+
   if (!mainWindow || mainWindow.isDestroyed()) {
-    dialog.showErrorBox("Fortified Command Center failed to start", message);
-    return;
+    dialog.showErrorBox("Fortified Command Center failed to start", detail);
+    return "close";
   }
 
+  const buttons = logPath ? ["Retry", "Open log", "Close"] : ["Retry", "Close"];
   const choice = dialog.showMessageBoxSync(mainWindow, {
     type: "error",
     title: "Fortified Command Center failed to start",
-    message: "The dashboard window opened, but the local server did not become ready.",
-    detail: message,
-    buttons: ["Close"],
+    message: "The local dashboard server did not become ready.",
+    detail,
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1,
   });
-  if (choice === 0) {
-    app.quit();
+
+  if (buttons[choice] === "Retry") return "retry";
+  if (buttons[choice] === "Open log" && logPath) {
+    shell.openPath(logPath);
+    return "retry";
   }
+  return "close";
+}
+
+async function loadDashboard(startUrl) {
+  const target = app.isPackaged ? dashboardUrl(startUrl) : startUrl;
+  setSplashStatus("Opening dashboard…", target);
+  await mainWindow.loadURL(target);
 }
 
 async function startApp() {
   openLog();
-  createWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  }
   await mainWindow.loadFile(path.join(__dirname, "splash.html"));
   setSplashStatus("Starting Fortified Command Center…", "Opening a local dashboard window.");
 
-  try {
-    const startUrl = app.isPackaged
-      ? await startBundledNextServer()
-      : process.env.ELECTRON_START_URL ?? "http://localhost:3000";
+  while (true) {
+    try {
+      const startUrl = app.isPackaged
+        ? await startBundledNextServer()
+        : process.env.ELECTRON_START_URL ?? "http://localhost:3000";
 
-    if (!app.isPackaged) {
-      setSplashStatus("Connecting to the dev server…", startUrl);
-      await waitForServer(startUrl, 40);
+      if (!app.isPackaged) {
+        setSplashStatus("Connecting to the dev server…", startUrl);
+        await waitForHttpReady(startUrl, { timeoutMs: 40_000 });
+      }
+
+      await loadDashboard(startUrl);
+      return;
+    } catch (error) {
+      stopServerProcess();
+      const action = showStartupError(error);
+      if (action !== "retry") {
+        app.quit();
+        return;
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        await mainWindow.loadFile(path.join(__dirname, "splash.html"));
+      }
+      setSplashStatus("Retrying…", "Starting the local server again.");
     }
-
-    setSplashStatus("Opening dashboard…", startUrl);
-    await mainWindow.loadURL(startUrl);
-  } catch (error) {
-    await showStartupError(error);
   }
 }
 
@@ -326,7 +337,7 @@ if (!gotLock) {
   app.whenReady().then(startApp).catch((error) => {
     dialog.showErrorBox(
       "Fortified Command Center failed to start",
-      error instanceof Error ? error.message : String(error),
+      asErrorMessage(error),
     );
     app.quit();
   });

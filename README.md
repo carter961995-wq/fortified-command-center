@@ -132,7 +132,9 @@ installer, not the unpacked Electron folder.
 4. If SmartScreen blocks an unsigned build: **More info → Run anyway**
 5. If you only see `*_artifacts.zip`, unzip it first — the installer is inside
 6. First launch shows a dark **Starting local server** screen, then the dashboard. Wait up to a
-   minute. If Windows says "Not responding", leave the window open until the dashboard appears.
+   couple of minutes. If Windows says "Not responding", leave the window open.
+7. If a dialog says **Fortified Command Center failed to start**, choose **Retry**. The log is
+   `%APPDATA%\\Fortified Command Center\\desktop-server.log`.
 
 This Windows workflow does not require a signing certificate. Add `CSC_LINK` / `CSC_KEY_PASSWORD`
 later if you want an Authenticode-signed installer.

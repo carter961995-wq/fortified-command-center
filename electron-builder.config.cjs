@@ -43,12 +43,19 @@ module.exports = {
   directories: {
     output: "dist-desktop",
   },
+  afterPack: "scripts/ensure-packaged-standalone.cjs",
   files: ["electron/**/*"],
   extraResources: [
     {
       from: ".next/standalone",
       to: "app",
-      filter: ["**/*", "!**/*.map"],
+      filter: ["**/*", "!node_modules", "!node_modules/**", "!**/*.map"],
+    },
+    // electron-builder's extraResources filter drops a top-level node_modules
+    // folder. Copy it as its own fileset so the packaged Next server can start.
+    {
+      from: ".next/standalone/node_modules",
+      to: "app/node_modules",
     },
   ],
   mac: {
@@ -77,5 +84,6 @@ module.exports = {
     createStartMenuShortcut: true,
     shortcutName: "Fortified Command Center",
     uninstallDisplayName: "Fortified Command Center",
+    include: require("path").join(__dirname, "electron/installer.nsh"),
   },
 };
