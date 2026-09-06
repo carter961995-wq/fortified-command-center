@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isDemoMode } from "@/lib/demo-mode";
 
-const PUBLIC_PREFIXES = ["/login", "/api/health"];
+const PUBLIC_PREFIXES = ["/login", "/api/health", "/api/gpt"];
 
 export async function middleware(request: NextRequest) {
   if (request.nextUrl.pathname === "/api/health" || request.nextUrl.pathname === "/app-shell.css") {

@@ -230,6 +230,37 @@ export async function createWorkOrderFromVisitAction(visitId: string, contractId
   redirect(`/work-orders/${String((workOrder as PlainRow).id)}`);
 }
 
+export async function assignWorkOrderSubcontractor(workOrderId: string, subcontractorId: string) {
+  const { supabase } = await requireSupabaseUser();
+  const { data: workOrder, error: loadError } = await supabase
+    .from("work_orders")
+    .select("id, status")
+    .eq("id", workOrderId)
+    .maybeSingle();
+  if (loadError || !workOrder) return { error: loadError?.message ?? "Work order not found." };
+
+  const currentStatus = String((workOrder as PlainRow).status ?? "New");
+  const nextStatus = ["New", "Needs Site Info", "Waiting on Sub Quote", "Quote Needed"].includes(currentStatus)
+    ? "Scheduled"
+    : currentStatus;
+
+  const { error } = await supabase
+    .from("work_orders")
+    .update({
+      subcontractor_id: subcontractorId,
+      status: nextStatus,
+      ...statusTimestampUpdates(nextStatus, workOrder as PlainRow),
+    })
+    .eq("id", workOrderId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/jobs");
+  revalidatePath("/work-orders");
+  revalidatePath(`/work-orders/${workOrderId}`);
+  revalidatePath("/subcontractor-map");
+  return { error: null };
+}
+
 export async function signOutAction() {
   const supabase = await createSupabaseServerClient();
   if (supabase) await supabase.auth.signOut();

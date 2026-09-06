@@ -42,7 +42,7 @@ import { cn } from "@/lib/utils";
 const LeafletMap = dynamic(() => import("./subcontractor-leaflet-map"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[620px] min-h-[520px] items-center justify-center rounded-b-2xl bg-slate-950 text-slate-300">
+    <div className="flex h-[620px] min-h-[520px] items-center justify-center rounded-b-2xl bg-[#d7e3ea] text-slate-700">
       <Loader2 className="mr-2 size-5 animate-spin" />
       Loading command map...
     </div>
