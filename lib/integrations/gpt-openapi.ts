@@ -195,6 +195,7 @@ export function gptOpenApiSpec(serverUrl: string) {
             workOrderId: { type: "string" },
             workOrderNumber: { type: "string" },
             customerWorkOrderNumber: { type: "string" },
+            title: { type: "string" },
             subcontractorId: { type: "string" },
             subcontractorName: { type: "string" },
             city: { type: "string" },

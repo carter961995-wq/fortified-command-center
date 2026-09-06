@@ -552,7 +552,8 @@ export async function dispatchWorkOrder(supabase: SupabaseClient, input: Record<
   const workOrder =
     workOrders.find((row) => String(row.id) === requestedId) ??
     workOrders.find((row) => namesMatch(row.work_order_number, input.workOrderNumber)) ??
-    workOrders.find((row) => namesMatch(row.customer_work_order_number, input.customerWorkOrderNumber ?? input.woNumber));
+    workOrders.find((row) => namesMatch(row.customer_work_order_number, input.customerWorkOrderNumber ?? input.woNumber)) ??
+    workOrders.find((row) => namesMatch(row.title, input.title ?? input.name));
   if (!workOrder) throw new Error("Work order not found. Import it first or pass workOrderNumber.");
 
   let subcontractor =
@@ -585,7 +586,7 @@ export async function dispatchWorkOrder(supabase: SupabaseClient, input: Record<
 
   if (!subcontractor) throw new Error("No matching subcontractor found for this job.");
 
-  const scheduledDate = asDate(input.scheduledDate) ?? cleanText(workOrder.scheduled_date) ?? null;
+  const scheduledDate = asDate(input.scheduledDate) || asDate(workOrder.scheduled_date);
   const status = normalizeWorkOrderStatus(input.status ?? "Scheduled");
   const { error } = await supabase
     .from("work_orders")
