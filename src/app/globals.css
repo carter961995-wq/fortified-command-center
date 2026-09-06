@@ -109,7 +109,18 @@
 
 @layer components {
   .leaflet-container {
+    background: #d7e3ea;
     font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  .leaflet-container img,
+  .leaflet-container video,
+  .leaflet-pane img,
+  .leaflet-tile,
+  .leaflet-marker-icon,
+  .leaflet-marker-shadow {
+    max-width: none !important;
+    max-height: none !important;
   }
 
   .leaflet-control-attribution {

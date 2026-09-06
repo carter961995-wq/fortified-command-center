@@ -11,6 +11,7 @@
     "desktop:dev": "concurrently -k -n next,electron -c blue,green \"npm run dev\" \"wait-on http://localhost:3000 && ELECTRON_START_URL=http://localhost:3000 electron electron/main.cjs\"",
     "desktop:prepare": "node scripts/prepare-electron-next.mjs",
     "test:desktop-pack": "node --test scripts/standalone-assets.test.mjs scripts/desktop-launch.test.mjs scripts/ensure-packaged-standalone.test.mjs",
+    "test:gpt-bridge": "node --experimental-strip-types --test scripts/gpt-normalize.test.ts",
     "desktop:dir": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --dir --publish never",
     "desktop:dist": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --mac --publish never",
     "desktop:dist:mac": "npm run build && npm run desktop:prepare && electron-builder --config electron-builder.config.cjs --mac --publish never",
