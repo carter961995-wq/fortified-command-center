@@ -166,6 +166,12 @@ function findByName(rows: PlainRow[], field: string, name: string) {
   return rows.find((row) => namesMatch(row[field], name)) ?? null;
 }
 
+function liveId(rows: PlainRow[], linked: string | null, fallback?: PlainRow | null) {
+  if (linked && rows.some((row) => String(row.id) === linked)) return linked;
+  if (fallback?.id) return String(fallback.id);
+  return null;
+}
+
 export async function importGptPayload(supabase: SupabaseClient, payload: Record<string, unknown>) {
   const store = await loadGptStore();
   const counts = {
@@ -227,7 +233,7 @@ export async function importGptPayload(supabase: SupabaseClient, payload: Record
     const companyName = cleanText(entry.companyName ?? entry.name ?? entry.company_name);
     if (!companyName) continue;
     const externalId = cleanText(entry.externalId ?? entry.id);
-    const existingId = linkedId(store, "customers", externalId) ?? findByName(customers, "company_name", companyName)?.id;
+    const existingId = liveId(customers, linkedId(store, "customers", externalId), findByName(customers, "company_name", companyName));
     const row = {
       company_name: companyName,
       contact_name: cleanText(entry.contactName ?? entry.contact_name) || null,
@@ -267,8 +273,11 @@ export async function importGptPayload(supabase: SupabaseClient, payload: Record
       lat: entry.lat as number | undefined,
       lng: entry.lng as number | undefined,
     });
-    const existingId =
-      linkedId(store, "subcontractors", externalId) ?? findByName(subcontractors, "company_name", companyName)?.id;
+    const existingId = liveId(
+      subcontractors,
+      linkedId(store, "subcontractors", externalId),
+      findByName(subcontractors, "company_name", companyName)
+    );
     const row = {
       company_name: companyName,
       owner_name: cleanText(entry.contactName ?? entry.owner_name ?? entry.contact) || null,
@@ -305,9 +314,11 @@ export async function importGptPayload(supabase: SupabaseClient, payload: Record
     if (!item || typeof item !== "object") continue;
     const entry = item as Record<string, unknown>;
     const customerName = cleanText(entry.customerName ?? entry.customer_name ?? entry.account);
-    const customerId =
-      linkedId(store, "customers", cleanText(entry.customerExternalId ?? entry.customerId)) ??
-      findByName(refreshedCustomers, "company_name", customerName)?.id;
+    const customerId = liveId(
+      refreshedCustomers,
+      linkedId(store, "customers", cleanText(entry.customerExternalId ?? entry.customerId)),
+      findByName(refreshedCustomers, "company_name", customerName)
+    );
     if (!customerId) continue;
     const locationName = cleanText(
       entry.locationName ?? entry.name ?? entry.storeNumber ?? entry.store_number,
@@ -360,27 +371,32 @@ export async function importGptPayload(supabase: SupabaseClient, payload: Record
     const entry = item as Record<string, unknown>;
     const title = cleanText(entry.title ?? entry.name ?? entry.scope, "Imported job");
     const customerName = cleanText(entry.customerName ?? entry.customer_name ?? entry.account);
-    const customerId =
-      linkedId(store, "customers", cleanText(entry.customerExternalId ?? entry.customerId)) ??
-      findByName(refreshedCustomers, "company_name", customerName)?.id;
+    const customerId = liveId(
+      refreshedCustomers,
+      linkedId(store, "customers", cleanText(entry.customerExternalId ?? entry.customerId)),
+      findByName(refreshedCustomers, "company_name", customerName)
+    );
     if (!customerId) continue;
 
     const customerLocations = locations.filter((row) => String(row.customer_id) === String(customerId));
-    const locationId =
-      linkedId(store, "locations", cleanText(entry.locationExternalId ?? entry.locationId)) ??
-      customerLocations.find((row) =>
-        namesMatch(row.location_name, entry.locationName ?? entry.location) ||
-        namesMatch(row.store_number, entry.storeNumber ?? entry.store_number) ||
-        namesMatch(row.city, entry.city)
-      )?.id ??
-      customerLocations[0]?.id;
+    const locationId = liveId(
+      locations,
+      linkedId(store, "locations", cleanText(entry.locationExternalId ?? entry.locationId)),
+      customerLocations.find(
+        (row) =>
+          namesMatch(row.location_name, entry.locationName ?? entry.location) ||
+          namesMatch(row.store_number, entry.storeNumber ?? entry.store_number) ||
+          namesMatch(row.city, entry.city)
+      ) ?? customerLocations[0]
+    );
     if (!locationId) continue;
 
     const subName = cleanText(entry.subcontractorName ?? entry.subcontractor ?? entry.assignedSub);
-    const subcontractorId =
-      linkedId(store, "subcontractors", cleanText(entry.subcontractorExternalId ?? entry.subcontractorId)) ??
-      (subName ? findByName(subcontractors, "company_name", subName)?.id : null) ??
-      null;
+    const subcontractorId = liveId(
+      subcontractors,
+      linkedId(store, "subcontractors", cleanText(entry.subcontractorExternalId ?? entry.subcontractorId)),
+      subName ? findByName(subcontractors, "company_name", subName) : null
+    );
 
     const externalId = cleanText(entry.externalId ?? entry.id);
     const number = cleanText(entry.workOrderNumber ?? entry.work_order_number);

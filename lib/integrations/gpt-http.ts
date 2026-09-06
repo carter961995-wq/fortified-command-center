@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "../supabase/server";
 import { getSessionContext } from "../data";
@@ -37,6 +38,16 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
+function revalidateCommandCenter() {
+  revalidatePath("/subcontractor-map");
+  revalidatePath("/clients");
+  revalidatePath("/customers");
+  revalidatePath("/jobs");
+  revalidatePath("/work-orders");
+  revalidatePath("/subcontractors");
+  revalidatePath("/dashboard");
+}
+
 export async function handleGptRequest(request: Request, slug: string[] = []) {
   const path = slug.join("/");
   if (request.method === "OPTIONS") return OPTIONS();
@@ -70,11 +81,13 @@ export async function handleGptRequest(request: Request, slug: string[] = []) {
     if (path === "import" && request.method === "POST") {
       const payload = (await request.json()) as Record<string, unknown>;
       const result = await importGptPayload(supabase, payload);
+      revalidateCommandCenter();
       return json({ ok: true, ...result });
     }
     if (path === "dispatch" && request.method === "POST") {
       const payload = (await request.json()) as Record<string, unknown>;
       const result = await dispatchWorkOrder(supabase, payload);
+      revalidateCommandCenter();
       return json({ ok: true, ...result });
     }
     if (path === "knowledge" && request.method === "GET") {
