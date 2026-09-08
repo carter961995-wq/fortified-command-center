@@ -4,26 +4,15 @@ import {
   CheckCircle2,
   Mail,
   Plus,
-  Search,
 } from "lucide-react";
 import { Card, ErrorNotice } from "./ui";
 import { MeasurementTool } from "./measurement-tool";
 import { JobIntakePanel } from "./job-intake-panel";
+import { SubcontractorMapPanel } from "./subcontractor-map-panel";
 import { displayValue, money, type PlainRow } from "../lib/business";
 import { featurePageMap, moduleMap } from "../lib/schema";
 import { fetchModuleRows } from "../lib/data";
-
-const subcontractorDots = [
-  { left: "61%", top: "52%", color: "bg-pink-500" },
-  { left: "69%", top: "52%", color: "bg-violet-500" },
-  { left: "74%", top: "63%", color: "bg-orange-500" },
-  { left: "75%", top: "70%", color: "bg-emerald-500" },
-  { left: "63%", top: "66%", color: "bg-red-500" },
-  { left: "82%", top: "62%", color: "bg-sky-500" },
-  { left: "83%", top: "64%", color: "bg-orange-400" },
-  { left: "80%", top: "66%", color: "bg-emerald-400" },
-  { left: "70%", top: "65%", color: "bg-teal-400" },
-];
+import { toSubcontractorPins, toWorkOrderPins } from "../lib/subcontractor-pins";
 
 function ToolHeader({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
   return (
@@ -147,55 +136,24 @@ function EmailInboxPage() {
 }
 
 async function SubcontractorMapPage() {
-  const { data: subs, error } = await fetchModuleRows(moduleMap.subcontractors);
+  const [{ data: subs, error }, { data: jobs, error: jobError }] = await Promise.all([
+    fetchModuleRows(moduleMap.subcontractors),
+    fetchModuleRows(moduleMap["work-orders"]),
+  ]);
   return (
-    <div className="mx-auto grid max-w-6xl gap-6">
+    <div className="mx-auto grid max-w-7xl gap-6">
       <ToolHeader
         title="Subcontractor Map"
-        description="Track your crew network across the country. Click a dot for details."
-        action={<Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/subcontractors/new"><Plus className="mr-2 inline size-4" />Add subcontractor</Link>}
+        description="Real street map of crew coverage and open job sites. Click a crew to open their card or dispatch an unassigned work order."
+        action={
+          <Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/subcontractors/new">
+            <Plus className="mr-2 inline size-4" />
+            Add subcontractor
+          </Link>
+        }
       />
-      <ErrorNotice message={error} />
-      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <aside className="overflow-hidden rounded-xl border border-[#1f304d] bg-[#111f38]">
-          <div className="border-b border-[#1f304d] p-4">
-            <div className="flex items-center gap-2 rounded-lg border border-[#223758] bg-[#0c172b] px-3 py-2 text-slate-500">
-              <Search className="size-4" />
-              <span className="text-sm">Search crews, cities, specialty...</span>
-            </div>
-            <p className="mt-3 text-xs font-bold text-slate-500">{subs.length} of {subs.length} crews</p>
-          </div>
-          <div className="max-h-[560px] overflow-y-auto">
-            {subs.map((sub, index) => (
-              <Link className="block border-b border-[#1f304d] p-4 hover:bg-[#172844]" href={`/subcontractors/${String(sub.id)}`} key={String(sub.id)}>
-                <div className="flex gap-3">
-                  <span className={`mt-1 size-3 rounded-full ${["bg-orange-400", "bg-blue-400", "bg-emerald-400", "bg-violet-400"][index % 4]}`} />
-                  <div>
-                    <p className="font-black text-white">{displayValue(sub, "company_name")}</p>
-                    <p className="text-xs font-semibold text-slate-400">{displayValue(sub, "city")}, {displayValue(sub, "state")}</p>
-                    <p className="mt-1 text-xs text-slate-500">{displayValue(sub, "trades")}</p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </aside>
-        <section className="relative min-h-[560px] overflow-hidden rounded-xl border border-[#1f304d] bg-[#eef7fa]">
-          <div className="absolute left-4 top-4 z-10 grid overflow-hidden rounded border border-slate-300 bg-white text-slate-900 shadow">
-            <button className="px-3 py-1 text-xl font-bold">+</button>
-            <button className="border-t border-slate-200 px-3 py-1 text-xl font-bold">−</button>
-          </div>
-          <div className="absolute inset-0 opacity-60 [background-image:linear-gradient(#d9e6ec_1px,transparent_1px),linear-gradient(90deg,#d9e6ec_1px,transparent_1px)] [background-size:76px_76px]" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="relative h-[78%] w-[82%] rounded-[45%] border border-sky-100 bg-white/70 shadow-inner">
-              <p className="absolute left-[43%] top-[47%] text-xs font-black uppercase tracking-wide text-slate-400">United States</p>
-              {subcontractorDots.map((dot) => (
-                <span className={`absolute size-4 rounded-full shadow-lg ${dot.color}`} style={{ left: dot.left, top: dot.top }} key={`${dot.left}-${dot.top}`} />
-              ))}
-            </div>
-          </div>
-        </section>
-      </div>
+      <ErrorNotice message={error ?? jobError} />
+      <SubcontractorMapPanel subcontractors={toSubcontractorPins(subs)} workOrders={toWorkOrderPins(jobs)} />
     </div>
   );
 }

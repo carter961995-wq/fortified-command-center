@@ -162,6 +162,22 @@ Settings includes a one-time **Connect Google** flow. To use it with real Google
 The app requests offline Google access so you sign in once, then it can refresh access for Gmail, Drive
 metadata, Calendar, and Contacts sync. Local desktop tokens are stored under the app user-data folder.
 
+## Fortified GPT connection
+
+Settings includes a **Fortified GPT bridge**. Use it to point your existing Custom GPT at this app so it can
+transfer customers, job sites, subcontractors, projects, and shop knowledge it already has, then dispatch
+work orders against those records.
+
+1. Open **Settings** and copy the schema URL plus API key.
+2. In ChatGPT, edit your Fortified GPT → **Configure → Actions → Create**.
+3. Import the schema URL. Set authentication to API Key / Bearer and paste the key.
+4. Paste the GPT instructions from Settings so the GPT calls `getSnapshot` then `importFortifiedData`.
+5. Custom GPT Actions need a public HTTPS URL. For the local/desktop app, put a tunnel in front of it
+   (Cloudflare Tunnel or ngrok) and use that origin in the schema URL.
+
+After a successful import, customers show under Clients, jobs show on the board, and crews appear on the
+Subcontractor Map.
+
 ## Environment variables
 
 For real persisted data, copy `.env.example` to `.env.local`, replace the placeholders with real Supabase
@@ -178,6 +194,7 @@ values, and set `NEXT_PUBLIC_DEMO_MODE=false` if you want to force Supabase mode
 | `GEMINI_API_KEY` | Optional Gemini key for extracting leads, work orders, contacts, and invoice tasks from messages/documents |
 | `GEMINI_MODEL` | Optional Gemini model name; defaults to `gemini-1.5-flash` |
 | `TWILIO_*` | Optional SMS/phone intake credentials for text/call workflows |
+| `FORTIFIED_GPT_API_KEY` | Optional API key for Custom GPT Actions. If unset, Settings generates and stores one in `.fortified-data` |
 | `CSC_LINK` / `CSC_KEY_PASSWORD` | Optional Mac desktop signing certificate and password. `MACOS_CERTIFICATE` / `MACOS_CERTIFICATE_PASSWORD` are accepted aliases |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Optional Apple ID notarization credentials for signed Mac desktop downloads. `APPLE_ID_PASSWORD` is accepted as a password alias |
 | `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` | Optional App Store Connect API notarization credentials. `APPLE_API_ISSUER_ID` is accepted as an issuer alias |

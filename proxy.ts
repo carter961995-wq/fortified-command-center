@@ -2,12 +2,13 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getSupabaseEnv, isDemoMode, isSupabaseConfigured } from "./lib/env";
 
-const publicPaths = ["/login", "/api/health"];
+const publicPaths = ["/login", "/api/health", "/api/gpt"];
 
 function isLaunchPublic(pathname: string) {
   return (
     pathname === "/api/health" ||
     pathname === "/app-shell.css" ||
+    pathname.startsWith("/api/gpt/") ||
     pathname.startsWith("/_next/")
   );
 }

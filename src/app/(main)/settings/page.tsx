@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { JobSourcesSetup } from "../../../../components/job-sources-setup";
+import { GptBridgePanel } from "../../../../components/gpt-bridge-panel";
 
 export const metadata = { title: "Settings" };
 
@@ -18,6 +19,10 @@ export default async function SettingsPage({
           Connect job sources first. Stripe and QuickBooks stay parked until billing export is live.
         </p>
       </header>
+
+      <section className="rounded-xl border border-slate-600 bg-slate-900 p-5">
+        <GptBridgePanel />
+      </section>
 
       <JobSourcesSetup googleMessage={sp.google} />
 

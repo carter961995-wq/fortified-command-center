@@ -39,7 +39,12 @@ export default async function SubcontractorsPage({
           <h1 className="text-2xl font-semibold tracking-tight">Subcontractors</h1>
           <p className="text-sm text-muted-foreground">Field partners, compliance, and performance.</p>
         </div>
-        <LinkButton href="/subcontractors/new">Add subcontractor</LinkButton>
+        <div className="flex flex-wrap gap-2">
+          <LinkButton href="/subcontractors/new">Add subcontractor</LinkButton>
+          <LinkButton href="/subcontractors/command-map" variant="outline">
+            Command map
+          </LinkButton>
+        </div>
       </div>
 
       <Card>

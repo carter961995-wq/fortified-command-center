@@ -1,5 +1,6 @@
 import { Card, PageHeader } from "../../../components/ui";
 import { JobSourcesSetup } from "../../../components/job-sources-setup";
+import { GptBridgePanel } from "../../../components/gpt-bridge-panel";
 import { isSupabaseConfigured } from "../../../lib/env";
 
 export default async function SettingsPage({
@@ -18,6 +19,9 @@ export default async function SettingsPage({
           <div className="rounded-xl bg-[#0c172b] p-3"><dt className="text-xs font-black uppercase text-slate-500">Anon key</dt><dd className="mt-1 font-bold text-white">{process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Set" : "Missing"}</dd></div>
           <div className="rounded-xl bg-[#0c172b] p-3"><dt className="text-xs font-black uppercase text-slate-500">Configured</dt><dd className="mt-1 font-bold text-white">{isSupabaseConfigured() ? "Yes" : "No / demo mode"}</dd></div>
         </dl>
+      </Card>
+      <Card>
+        <GptBridgePanel />
       </Card>
       <Card>
         <h2 className="text-lg font-black text-white">Job sources</h2>

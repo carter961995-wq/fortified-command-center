@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
-import { Circle, CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import React, { useEffect } from "react";
+import { Circle, CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
+import L from "leaflet";
 import {
   clusterSubcontractors,
   milesToMeters,
@@ -13,6 +14,31 @@ interface SubcontractorLeafletMapProps {
   subcontractors: SubcontractorWrapSheet[];
   selectedId?: string;
   onSelectSubcontractor: (subcontractor: SubcontractorWrapSheet) => void;
+}
+
+function FitNetwork({ subcontractors, selectedId }: { subcontractors: SubcontractorWrapSheet[]; selectedId?: string }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => map.invalidateSize(), 80);
+    return () => window.clearTimeout(handle);
+  }, [map]);
+
+  useEffect(() => {
+    const selected = subcontractors.find((item) => item.id === selectedId);
+    if (selected) {
+      map.flyTo([selected.location.lat, selected.location.lng], Math.max(map.getZoom(), 7), { duration: 0.55 });
+      return;
+    }
+    if (subcontractors.length === 0) {
+      map.setView([34.5, -89.5], 5);
+      return;
+    }
+    const bounds = L.latLngBounds(subcontractors.map((item) => [item.location.lat, item.location.lng]));
+    map.fitBounds(bounds.pad(0.2), { maxZoom: 7 });
+  }, [map, selectedId, subcontractors]);
+
+  return null;
 }
 
 export default function SubcontractorLeafletMap({
@@ -27,14 +53,17 @@ export default function SubcontractorLeafletMap({
       center={[34.5, -89.5]}
       zoom={5}
       minZoom={4}
-      maxZoom={12}
+      maxZoom={14}
       scrollWheelZoom
-      className="h-[620px] min-h-[520px] w-full rounded-b-2xl bg-slate-950"
+      className="h-[620px] min-h-[520px] w-full rounded-b-2xl bg-[#d7e3ea]"
     >
       <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution="Tiles &copy; Esri &mdash; Esri, TomTom, Garmin, FAO, NOAA, USGS"
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+        maxNativeZoom={19}
+        maxZoom={14}
       />
+      <FitNetwork subcontractors={subcontractors} selectedId={selectedId} />
 
       {clusters.map((cluster) => {
         if (cluster.members.length > 1) {

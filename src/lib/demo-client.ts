@@ -1,3 +1,5 @@
+import { loadDemoOverlaySync, saveDemoOverlaySync } from "./demo-persist";
+
 type DemoRow = Record<string, any>;
 type DemoTable = keyof typeof demoDb;
 type Filter = { column: string; op: string; value: any };
@@ -620,6 +622,7 @@ const demoUser = {
 };
 
 export function createDemoClient() {
+  applyDemoOverlay();
   return {
     auth: {
       async getUser() {
@@ -762,6 +765,7 @@ class DemoQuery implements PromiseLike<any> {
   }
 
   private async execute() {
+    applyDemoOverlay();
     if (this.action === "insert") return this.executeInsert();
     if (this.action === "update") return this.executeUpdate();
     if (this.action === "delete") return this.executeDelete();
@@ -799,6 +803,7 @@ class DemoQuery implements PromiseLike<any> {
     const rows = input.map((value) => normalizeInsertedRow(this.table, value));
     const tableRows = physicalRows(this.table);
     tableRows.push(...rows);
+    persistDemoTables();
     const data = rows.map((row) => attachRelations(this.table, row));
     if (this.resultMode === "single") return { data: data[0] ?? null, error: null, count: data.length };
     return { data, error: null, count: data.length };
@@ -810,6 +815,7 @@ class DemoQuery implements PromiseLike<any> {
     for (const row of rows) {
       if (matches.has(row.id)) Object.assign(row, this.mutationValue, { updated_at: now });
     }
+    persistDemoTables();
     return { data: null, error: null, count: matches.size };
   }
 
@@ -818,6 +824,7 @@ class DemoQuery implements PromiseLike<any> {
     const matches = new Set(this.filteredRows().map((row) => row.id));
     const keep = rows.filter((row) => !matches.has(row.id));
     rows.splice(0, rows.length, ...keep);
+    persistDemoTables();
     return { data: null, error: null, count: matches.size };
   }
 
@@ -841,6 +848,31 @@ function readRows(table: DemoTable): DemoRow[] {
 
 function physicalRows(table: DemoTable): DemoRow[] {
   return (demoDb[table] ?? []) as DemoRow[];
+}
+
+function applyDemoOverlay() {
+  const overlay = loadDemoOverlaySync();
+  if (!overlay) return;
+  for (const table of ["customers", "locations", "subcontractors", "work_orders"] as const) {
+    const incoming = overlay[table];
+    if (!Array.isArray(incoming)) continue;
+    const current = physicalRows(table);
+    for (const row of incoming) {
+      if (!row || typeof row !== "object" || !row.id) continue;
+      const index = current.findIndex((item) => item.id === row.id);
+      if (index >= 0) current[index] = { ...current[index], ...row };
+      else current.push({ ...row });
+    }
+  }
+}
+
+function persistDemoTables() {
+  saveDemoOverlaySync({
+    customers: physicalRows("customers").map((row) => ({ ...row })),
+    locations: physicalRows("locations").map((row) => ({ ...row })),
+    subcontractors: physicalRows("subcontractors").map((row) => ({ ...row })),
+    work_orders: physicalRows("work_orders").map((row) => ({ ...row })),
+  });
 }
 
 function normalizeInsertedRow(table: DemoTable, value: DemoRow) {
