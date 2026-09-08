@@ -11,6 +11,8 @@ import {
   importGptPayload,
   loadGptStore,
   rotateGptApiKey,
+  saveGptPublicBaseUrl,
+  gptPublicOrigin,
   snapshotGpt,
   updateBusinessProfile,
   upsertCompanyKnowledge,
@@ -59,8 +61,8 @@ export async function handleGptRequest(request: Request, slug: string[] = []) {
   if (request.method === "OPTIONS") return OPTIONS();
 
   if (path === "openapi" || path === "openapi.json") {
-    const origin = new URL(request.url).origin;
-    return json(gptOpenApiSpec(origin));
+    const store = await loadGptStore();
+    return json(gptOpenApiSpec(gptPublicOrigin(store, request)));
   }
 
   if (path === "settings") {
@@ -139,7 +141,7 @@ async function handleSettings(request: Request) {
   }
 
   if (request.method === "POST") {
-    const body = (await request.json().catch(() => ({}))) as { action?: string };
+    const body = (await request.json().catch(() => ({}))) as { action?: string; publicBaseUrl?: string };
     if (body.action === "rotate") {
       const rotated = await rotateGptApiKey();
       return json({
@@ -151,11 +153,39 @@ async function handleSettings(request: Request) {
           : null,
       });
     }
+    if (body.action === "savePublicUrl") {
+      const store = await saveGptPublicBaseUrl(body.publicBaseUrl ?? "");
+      const origin = gptPublicOrigin(store, request);
+      return json({
+        ok: true,
+        publicBaseUrl: store.publicBaseUrl ?? "",
+        openApiUrl: `${origin}/api/gpt/v1/openapi`,
+        importUrl: `${origin}/api/gpt/v1/import`,
+        snapshotUrl: `${origin}/api/gpt/v1/snapshot`,
+        knowledgeUrl: `${origin}/api/gpt/v1/knowledge`,
+        updateUrl: `${origin}/api/gpt/v1/update`,
+        businessUrl: `${origin}/api/gpt/v1/business`,
+      });
+    }
+    if (body.action === "test") {
+      const supabase = await requireBridgeClient();
+      const snap = await snapshotGpt(supabase);
+      return json({
+        ok: true,
+        tested: true,
+        demoMode: isDemoMode(),
+        counts: snap.counts,
+        knowledge: snap.knowledge.length,
+        business: snap.business.companyName || null,
+      });
+    }
   }
 
   const ensured = await ensureGptApiKey();
-  const origin = new URL(request.url).origin;
+  const origin = gptPublicOrigin(ensured.store, request);
+  const localOrigin = new URL(request.url).origin;
   const key = configuredGptApiKey(ensured.store);
+  const localhost = /localhost|127\.0\.0\.1/.test(origin);
   return json({
     ok: true,
     demoMode: isDemoMode(),
@@ -163,6 +193,9 @@ async function handleSettings(request: Request) {
     hasKey: Boolean(key),
     apiKey: key,
     keyPreview: key ? `…${key.slice(-4)}` : null,
+    publicBaseUrl: ensured.store.publicBaseUrl ?? "",
+    localOrigin,
+    chatGptReady: !localhost && origin.startsWith("https://"),
     openApiUrl: `${origin}/api/gpt/v1/openapi`,
     importUrl: `${origin}/api/gpt/v1/import`,
     snapshotUrl: `${origin}/api/gpt/v1/snapshot`,

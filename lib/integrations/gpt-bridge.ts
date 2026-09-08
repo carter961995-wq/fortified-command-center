@@ -50,6 +50,7 @@ export type GptLinkMap = {
 
 export type GptStore = {
   apiKey: string;
+  publicBaseUrl?: string;
   createdAt: string;
   updatedAt: string;
   business: BusinessProfile;
@@ -74,6 +75,7 @@ function emptyStore(): GptStore {
   const now = new Date().toISOString();
   return {
     apiKey: "",
+    publicBaseUrl: "",
     createdAt: now,
     updatedAt: now,
     business: {},
@@ -101,6 +103,7 @@ export async function loadGptStore(): Promise<GptStore> {
       },
       importLog: Array.isArray(parsed.importLog) ? parsed.importLog.slice(0, 40) : [],
       apiKey: parsed.apiKey ?? "",
+      publicBaseUrl: parsed.publicBaseUrl ?? "",
     };
   } catch {
     return emptyStore();
@@ -112,6 +115,29 @@ export async function saveGptStore(store: GptStore) {
   const next = { ...store, updatedAt: new Date().toISOString() };
   await writeFile(storePath(), JSON.stringify(next, null, 2), { mode: 0o600 });
   return next;
+}
+
+export function gptPublicOrigin(store: GptStore, request: Request) {
+  const saved = cleanText(store.publicBaseUrl).replace(/\/$/, "");
+  if (saved) return saved;
+  return new URL(request.url).origin;
+}
+
+export async function saveGptPublicBaseUrl(raw: string) {
+  const store = await loadGptStore();
+  const cleaned = cleanText(raw).replace(/\/$/, "");
+  if (cleaned) {
+    let parsed: URL;
+    try {
+      parsed = new URL(cleaned);
+    } catch {
+      throw new Error("Enter a full URL, like https://your-tunnel.trycloudflare.com");
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("The public URL must start with https://");
+    }
+  }
+  return saveGptStore({ ...store, publicBaseUrl: cleaned });
 }
 
 export function configuredGptApiKey(store: GptStore) {
