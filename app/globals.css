@@ -105,11 +105,20 @@ button, .button-like { font: inherit; }
   max-height: none !important;
 }
 
-.leaflet-control-attribution {
-  border-top-left-radius: 0.5rem;
-  background: rgba(15, 23, 42, 0.86) !important;
-  color: #cbd5e1 !important;
-  font-size: 0.625rem;
+.leaflet-control-layers {
+  border: 0 !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  color: #e2e8f0 !important;
+}
+
+.leaflet-control-layers-expanded {
+  padding: 0.6rem 0.75rem !important;
+}
+
+.leaflet-control-scale-line {
+  border-color: #f97316 !important;
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: #fff !important;
 }
 
 .leaflet-tooltip {

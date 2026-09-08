@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import {
+  CircleMarker,
+  LayersControl,
+  MapContainer,
+  Polyline,
+  ScaleControl,
+  TileLayer,
+  Tooltip,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 
 export type MeasurementPoint = {
   id: string;
@@ -22,7 +32,14 @@ export type MeasurementMapTarget = {
   token: number;
 };
 
-const DEFAULT_CENTER: [number, number] = [33.749, -84.388];
+const DEFAULT_CENTER: [number, number] = [30.4515, -91.1871];
+
+const GOOGLE_SAT =
+  "https://{s}.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&scale=2";
+const GOOGLE_HYBRID =
+  "https://{s}.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}&scale=2";
+const ESRI_SAT =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
 function AddPointOnClick({ onAddPoint }: { onAddPoint: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -38,6 +55,11 @@ function RecenterOnTarget({ target }: { target: MeasurementMapTarget | null }) {
   const map = useMap();
 
   useEffect(() => {
+    const handle = window.setTimeout(() => map.invalidateSize(), 80);
+    return () => window.clearTimeout(handle);
+  }, [map]);
+
+  useEffect(() => {
     if (!target) return;
     map.flyTo(target.center, target.zoom, { duration: 0.75 });
   }, [map, target]);
@@ -46,10 +68,7 @@ function RecenterOnTarget({ target }: { target: MeasurementMapTarget | null }) {
 }
 
 function segmentMidpoint(segment: MeasurementSegment): [number, number] {
-  return [
-    (segment.from.lat + segment.to.lat) / 2,
-    (segment.from.lng + segment.to.lng) / 2,
-  ];
+  return [(segment.from.lat + segment.to.lat) / 2, (segment.from.lng + segment.to.lng) / 2];
 }
 
 function formatFeet(feet: number) {
@@ -68,21 +87,57 @@ export default function MeasurementToolMap({
   onAddPoint: (lat: number, lng: number) => void;
 }) {
   return (
-    <div className="relative min-h-[640px] overflow-hidden rounded-xl border border-[#1f304d] bg-[#0c172b]">
+    <div className="relative min-h-[75vh] overflow-hidden rounded-xl border border-[#1f304d] bg-[#0c172b]">
       <MapContainer
         center={DEFAULT_CENTER}
-        zoom={18}
+        className="h-[75vh] min-h-[75vh] w-full"
+        doubleClickZoom={false}
+        maxZoom={22}
         minZoom={3}
-        maxZoom={21}
         scrollWheelZoom
-        className="h-[640px] min-h-[640px] w-full"
+        zoom={19}
+        zoomDelta={0.5}
+        zoomSnap={0.5}
       >
-        <TileLayer
-          attribution="Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
-          maxNativeZoom={19}
-          maxZoom={21}
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        />
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer checked name="Google Satellite (sharpest)">
+            <TileLayer
+              attribution="Imagery &copy; Google"
+              keepBuffer={8}
+              maxNativeZoom={22}
+              maxZoom={22}
+              minZoom={3}
+              subdomains={["mt0", "mt1", "mt2", "mt3"]}
+              updateWhenIdle
+              updateWhenZooming={false}
+              url={GOOGLE_SAT}
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Google Hybrid (labels)">
+            <TileLayer
+              attribution="Imagery &copy; Google"
+              keepBuffer={8}
+              maxNativeZoom={22}
+              maxZoom={22}
+              minZoom={3}
+              subdomains={["mt0", "mt1", "mt2", "mt3"]}
+              updateWhenIdle
+              updateWhenZooming={false}
+              url={GOOGLE_HYBRID}
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Esri World Imagery">
+            <TileLayer
+              attribution="Tiles &copy; Esri, Maxar"
+              detectRetina
+              keepBuffer={8}
+              maxNativeZoom={19}
+              maxZoom={22}
+              url={ESRI_SAT}
+            />
+          </LayersControl.BaseLayer>
+        </LayersControl>
+        <ScaleControl imperial metric={false} position="bottomleft" />
         <AddPointOnClick onAddPoint={onAddPoint} />
         <RecenterOnTarget target={mapTarget} />
 
@@ -92,7 +147,7 @@ export default function MeasurementToolMap({
             pathOptions={{
               color: "#f97316",
               opacity: 0.95,
-              weight: 5,
+              weight: 4,
             }}
             positions={[
               [segment.from.lat, segment.from.lng],
@@ -117,7 +172,7 @@ export default function MeasurementToolMap({
               fillOpacity: 1,
               weight: 3,
             }}
-            radius={8}
+            radius={6}
           >
             <Tooltip direction="top" offset={[0, -8]} permanent>
               <span className="font-black text-slate-950">{index + 1}</span>
@@ -126,9 +181,9 @@ export default function MeasurementToolMap({
         ))}
       </MapContainer>
 
-      <div className="pointer-events-none absolute left-4 top-4 max-w-sm rounded-xl border border-white/20 bg-slate-950/85 p-3 text-xs font-semibold leading-5 text-slate-200 shadow-2xl backdrop-blur">
-        Search an address, switch to the exact property in satellite view, then click each corner,
-        gate opening, or fence run endpoint. Each click adds the next measured segment.
+      <div className="pointer-events-none absolute bottom-8 left-4 max-w-sm rounded-xl border border-white/20 bg-slate-950/85 p-3 text-xs font-semibold leading-5 text-slate-200 shadow-2xl backdrop-blur">
+        Zoom in until posts, gates, vehicles, and patio details are readable. Click exact corners.
+        Use the layer picker for Hybrid labels if you need street names.
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import {
   namesMatch,
   normalizeCustomerStatus,
   normalizeCustomerType,
+  normalizeKnowledgeCategory,
   normalizePriority,
   normalizeSource,
   normalizeState,
@@ -49,6 +50,7 @@ export type GptLinkMap = {
 
 export type GptStore = {
   apiKey: string;
+  publicBaseUrl?: string;
   createdAt: string;
   updatedAt: string;
   business: BusinessProfile;
@@ -73,6 +75,7 @@ function emptyStore(): GptStore {
   const now = new Date().toISOString();
   return {
     apiKey: "",
+    publicBaseUrl: "",
     createdAt: now,
     updatedAt: now,
     business: {},
@@ -100,6 +103,7 @@ export async function loadGptStore(): Promise<GptStore> {
       },
       importLog: Array.isArray(parsed.importLog) ? parsed.importLog.slice(0, 40) : [],
       apiKey: parsed.apiKey ?? "",
+      publicBaseUrl: parsed.publicBaseUrl ?? "",
     };
   } catch {
     return emptyStore();
@@ -111,6 +115,29 @@ export async function saveGptStore(store: GptStore) {
   const next = { ...store, updatedAt: new Date().toISOString() };
   await writeFile(storePath(), JSON.stringify(next, null, 2), { mode: 0o600 });
   return next;
+}
+
+export function gptPublicOrigin(store: GptStore, request: Request) {
+  const saved = cleanText(store.publicBaseUrl).replace(/\/$/, "");
+  if (saved) return saved;
+  return new URL(request.url).origin;
+}
+
+export async function saveGptPublicBaseUrl(raw: string) {
+  const store = await loadGptStore();
+  const cleaned = cleanText(raw).replace(/\/$/, "");
+  if (cleaned) {
+    let parsed: URL;
+    try {
+      parsed = new URL(cleaned);
+    } catch {
+      throw new Error("Enter a full URL, like https://your-tunnel.trycloudflare.com");
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("The public URL must start with https://");
+    }
+  }
+  return saveGptStore({ ...store, publicBaseUrl: cleaned });
 }
 
 export function configuredGptApiKey(store: GptStore) {
@@ -183,49 +210,9 @@ export async function importGptPayload(supabase: SupabaseClient, payload: Record
   };
 
   if (payload.business && typeof payload.business === "object") {
-    const business = payload.business as Record<string, unknown>;
-    store.business = {
-      ...store.business,
-      companyName: cleanText(business.companyName ?? business.name, store.business.companyName ?? ""),
-      phone: cleanText(business.phone, store.business.phone ?? ""),
-      email: cleanText(business.email, store.business.email ?? ""),
-      website: cleanText(business.website, store.business.website ?? ""),
-      operatingStates: cleanList(business.operatingStates ?? business.states).length
-        ? cleanList(business.operatingStates ?? business.states).map(normalizeState)
-        : store.business.operatingStates,
-      notes: cleanText(business.notes ?? business.about, store.business.notes ?? ""),
-      pricingRules: cleanText(business.pricingRules ?? business.pricing, store.business.pricingRules ?? ""),
-      dispatchRules: cleanText(business.dispatchRules ?? business.dispatch, store.business.dispatchRules ?? ""),
-    };
+    applyBusinessProfile(store, payload.business as Record<string, unknown>);
   }
-
-  const knowledgeItems = [
-    ...((payload.knowledge as unknown[]) ?? []),
-    ...((payload.playbooks as unknown[]) ?? []),
-    ...((payload.facts as unknown[]) ?? []),
-  ];
-  for (const item of knowledgeItems) {
-    if (!item || typeof item !== "object") continue;
-    const entry = item as Record<string, unknown>;
-    const title = cleanText(entry.title ?? entry.name);
-    const content = cleanText(entry.content ?? entry.body ?? entry.text);
-    if (!title && !content) continue;
-    const existing = store.knowledge.find((row) => namesMatch(row.title, title));
-    if (existing) {
-      existing.content = content || existing.content;
-      existing.category = cleanText(entry.category ?? entry.type, existing.category);
-      existing.updatedAt = new Date().toISOString();
-    } else {
-      store.knowledge.unshift({
-        id: cleanText(entry.id) || randomUUID(),
-        title: title || "Untitled note",
-        category: cleanText(entry.category ?? entry.type, "general"),
-        content,
-        updatedAt: new Date().toISOString(),
-      });
-    }
-    counts.knowledge += 1;
-  }
+  counts.knowledge += applyKnowledgePayload(store, payload);
 
   const customers = await allRows(supabase, "customers");
   const customerItems = asObjectList(payload.customers);
@@ -631,32 +618,231 @@ export async function dispatchWorkOrder(supabase: SupabaseClient, input: Record<
   };
 }
 
-export async function upsertKnowledge(entries: unknown[]) {
-  const store = await loadGptStore();
-  let saved = 0;
-  for (const item of entries) {
-    if (!item || typeof item !== "object") continue;
-    const entry = item as Record<string, unknown>;
-    const title = cleanText(entry.title ?? entry.name);
-    const content = cleanText(entry.content ?? entry.body ?? entry.text);
-    if (!title && !content) continue;
-    const existing = store.knowledge.find((row) => namesMatch(row.title, title) || row.id === cleanText(entry.id));
-    if (existing) {
-      existing.title = title || existing.title;
-      existing.content = content || existing.content;
-      existing.category = cleanText(entry.category, existing.category);
-      existing.updatedAt = new Date().toISOString();
-    } else {
-      store.knowledge.unshift({
-        id: cleanText(entry.id) || randomUUID(),
-        title: title || "Untitled note",
-        category: cleanText(entry.category, "general"),
+export function applyBusinessProfile(store: GptStore, business: Record<string, unknown>) {
+  store.business = {
+    ...store.business,
+    companyName: cleanText(business.companyName ?? business.name, store.business.companyName ?? ""),
+    phone: cleanText(business.phone, store.business.phone ?? ""),
+    email: cleanText(business.email, store.business.email ?? ""),
+    website: cleanText(business.website, store.business.website ?? ""),
+    operatingStates: cleanList(business.operatingStates ?? business.states).length
+      ? cleanList(business.operatingStates ?? business.states).map(normalizeState)
+      : store.business.operatingStates,
+    notes: cleanText(business.notes ?? business.about, store.business.notes ?? ""),
+    pricingRules: cleanText(business.pricingRules ?? business.pricing, store.business.pricingRules ?? ""),
+    dispatchRules: cleanText(business.dispatchRules ?? business.dispatch, store.business.dispatchRules ?? ""),
+  };
+  mirrorBusinessToKnowledge(store);
+}
+
+function defaultTitleForCategory(category: string) {
+  if (category === "sop") return "Company SOP";
+  if (category === "guideline") return "Company guidelines";
+  if (category === "pricing") return "Company pricing";
+  if (category === "script") return "Call script";
+  if (category === "vendor") return "Vendor notes";
+  return "Company knowledge";
+}
+
+export function knowledgeItemsFromPayload(payload: Record<string, unknown>) {
+  const groups: Array<{ items: unknown; category: string }> = [
+    { items: payload.knowledge, category: "general" },
+    { items: payload.entries, category: "general" },
+    { items: payload.facts, category: "general" },
+    { items: payload.playbooks, category: "sop" },
+    { items: payload.sops ?? payload.sop, category: "sop" },
+    { items: payload.guidelines ?? payload.policies, category: "guideline" },
+    { items: payload.pricing ?? payload.pricingData, category: "pricing" },
+    { items: payload.scripts, category: "script" },
+  ];
+
+  const collected: Array<{ id?: string; title: string; category: string; content: string }> = [];
+  for (const group of groups) {
+    const items =
+      typeof group.items === "string"
+        ? [group.items]
+        : Array.isArray(group.items)
+          ? group.items
+          : [];
+    for (const item of items) {
+      if (typeof item === "string") {
+        const content = item.trim();
+        if (!content) continue;
+        collected.push({
+          title: defaultTitleForCategory(group.category),
+          category: group.category,
+          content,
+        });
+        continue;
+      }
+      if (!item || typeof item !== "object") continue;
+      const entry = item as Record<string, unknown>;
+      const title = cleanText(entry.title ?? entry.name);
+      const content = cleanText(entry.content ?? entry.body ?? entry.text ?? entry.rules);
+      if (!title && !content) continue;
+      collected.push({
+        id: cleanText(entry.id) || undefined,
+        title: title || defaultTitleForCategory(group.category),
+        category: normalizeKnowledgeCategory(entry.category ?? entry.type, group.category as "general"),
         content,
-        updatedAt: new Date().toISOString(),
       });
     }
-    saved += 1;
   }
+  return collected;
+}
+
+function upsertKnowledgeRow(
+  store: GptStore,
+  entry: { id?: string; title: string; category: string; content: string }
+) {
+  const category = normalizeKnowledgeCategory(entry.category);
+  const existing = store.knowledge.find(
+    (row) => (entry.id && row.id === entry.id) || namesMatch(row.title, entry.title)
+  );
+  if (existing) {
+    existing.title = entry.title || existing.title;
+    existing.content = entry.content || existing.content;
+    existing.category = category || existing.category;
+    existing.updatedAt = new Date().toISOString();
+    return existing;
+  }
+  const created: KnowledgeEntry = {
+    id: entry.id || randomUUID(),
+    title: entry.title || "Untitled note",
+    category,
+    content: entry.content,
+    updatedAt: new Date().toISOString(),
+  };
+  store.knowledge.unshift(created);
+  return created;
+}
+
+function mirrorBusinessToKnowledge(store: GptStore) {
+  if (store.business.pricingRules) {
+    upsertKnowledgeRow(store, {
+      title: "Company pricing",
+      category: "pricing",
+      content: store.business.pricingRules,
+    });
+  }
+  if (store.business.dispatchRules) {
+    upsertKnowledgeRow(store, {
+      title: "Dispatch rules",
+      category: "sop",
+      content: store.business.dispatchRules,
+    });
+  }
+  if (store.business.notes) {
+    upsertKnowledgeRow(store, {
+      title: "Company guidelines",
+      category: "guideline",
+      content: store.business.notes,
+    });
+  }
+}
+
+function mirrorKnowledgeToBusiness(store: GptStore) {
+  const pricing = store.knowledge.find((row) => namesMatch(row.title, "Company pricing"));
+  if (pricing?.content) store.business.pricingRules = pricing.content;
+  const dispatch = store.knowledge.find((row) => namesMatch(row.title, "Dispatch rules"));
+  if (dispatch?.content) store.business.dispatchRules = dispatch.content;
+  const guidelines = store.knowledge.find((row) => namesMatch(row.title, "Company guidelines"));
+  if (guidelines?.content) store.business.notes = guidelines.content;
+}
+
+export function applyKnowledgePayload(store: GptStore, payload: Record<string, unknown>) {
+  const items = knowledgeItemsFromPayload(payload);
+  for (const item of items) upsertKnowledgeRow(store, item);
+  const isRecordBundle = Boolean(payload.customers || payload.workOrders || payload.projects || payload.locations);
+  if (!isRecordBundle && !items.length && (payload.title || payload.content || payload.body || payload.text)) {
+    const title = cleanText(payload.title ?? payload.name);
+    const content = cleanText(payload.content ?? payload.body ?? payload.text);
+    if (title || content) {
+      upsertKnowledgeRow(store, {
+        id: cleanText(payload.id) || undefined,
+        title: title || defaultTitleForCategory(normalizeKnowledgeCategory(payload.category)),
+        category: normalizeKnowledgeCategory(payload.category),
+        content,
+      });
+      items.push({ title: title || "Untitled note", category: "general", content });
+    }
+  }
+  mirrorKnowledgeToBusiness(store);
+  return items.length;
+}
+
+export async function upsertKnowledge(entries: unknown[]) {
+  const store = await loadGptStore();
+  const saved = applyKnowledgePayload(store, { entries });
   await saveGptStore(store);
-  return { saved, knowledge: store.knowledge };
+  return { saved, knowledge: store.knowledge, business: store.business };
+}
+
+export async function upsertCompanyKnowledge(payload: Record<string, unknown>) {
+  const store = await loadGptStore();
+  if (payload.business && typeof payload.business === "object") {
+    applyBusinessProfile(store, payload.business as Record<string, unknown>);
+  }
+  const saved = applyKnowledgePayload(store, payload);
+  await saveGptStore(store);
+  return { saved, knowledge: store.knowledge, business: store.business };
+}
+
+export async function updateBusinessProfile(business: Record<string, unknown>) {
+  const store = await loadGptStore();
+  applyBusinessProfile(store, business);
+  await saveGptStore(store);
+  return { business: store.business, knowledge: store.knowledge };
+}
+
+export async function deleteKnowledge(id: string) {
+  const store = await loadGptStore();
+  store.knowledge = store.knowledge.filter((row) => row.id !== id);
+  await saveGptStore(store);
+  return { knowledge: store.knowledge, business: store.business };
+}
+
+export function normalizeGptWritePayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const type = matchKey(payload.type ?? payload.recordType ?? payload.kind);
+  const record = (payload.record && typeof payload.record === "object"
+    ? payload.record
+    : payload) as Record<string, unknown>;
+
+  if (type === "customer" || type === "lead" || type === "client") {
+    return { customers: [record] };
+  }
+  if (type === "location" || type === "site") {
+    return { locations: [record] };
+  }
+  if (type === "subcontractor" || type === "sub" || type === "crew") {
+    return { subcontractors: [record] };
+  }
+  if (type === "workorder" || type === "job" || type === "project") {
+    return { workOrders: [record] };
+  }
+  if (type === "sop" || type === "guideline" || type === "pricing" || type === "knowledge" || type === "script") {
+    return { knowledge: [{ ...record, category: record.category ?? type }] };
+  }
+  if (type === "business" || type === "company" || type === "profile") {
+    return { business: record.business ?? record };
+  }
+  return payload;
+}
+
+export async function writeGptPayload(supabase: SupabaseClient, payload: Record<string, unknown>) {
+  const normalized = normalizeGptWritePayload(payload);
+  if (normalized.business && !normalized.customers && !normalized.workOrders && !normalized.knowledge && !normalized.sops) {
+    const store = await updateBusinessProfile(normalized.business as Record<string, unknown>);
+    return { counts: { business: 1 }, ...store };
+  }
+  if (
+    (normalized.knowledge || normalized.sops || normalized.guidelines || normalized.pricing) &&
+    !normalized.customers &&
+    !normalized.workOrders &&
+    !normalized.locations &&
+    !normalized.subcontractors
+  ) {
+    return upsertCompanyKnowledge(normalized);
+  }
+  return importGptPayload(supabase, normalized);
 }

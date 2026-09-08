@@ -9,10 +9,13 @@ import { Card, ErrorNotice } from "./ui";
 import { MeasurementTool } from "./measurement-tool";
 import { JobIntakePanel } from "./job-intake-panel";
 import { SubcontractorMapPanel } from "./subcontractor-map-panel";
+import { WebsiteExtractorPanel } from "./website-extractor-panel";
+import { FenceBiblePanel } from "./fence-bible-panel";
 import { displayValue, money, type PlainRow } from "../lib/business";
 import { featurePageMap, moduleMap } from "../lib/schema";
 import { fetchModuleRows } from "../lib/data";
 import { toSubcontractorPins, toWorkOrderPins } from "../lib/subcontractor-pins";
+import { loadGptStore } from "../lib/integrations/gpt-bridge";
 
 function ToolHeader({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
   return (
@@ -187,6 +190,11 @@ async function InvoicingToolPage() {
   );
 }
 
+async function FenceBiblePage() {
+  const store = await loadGptStore();
+  return <FenceBiblePanel initialBusiness={store.business} initialKnowledge={store.knowledge} />;
+}
+
 export async function FeaturePage({ slug }: { slug: string }) {
   const page = featurePageMap[slug];
   if (slug === "planner") return <PlannerPage />;
@@ -196,6 +204,8 @@ export async function FeaturePage({ slug }: { slug: string }) {
   if (slug === "measurement-tool") return <MeasurementTool />;
   if (slug === "subcontractor-map") return <SubcontractorMapPage />;
   if (slug === "invoices") return <InvoicingToolPage />;
+  if (slug === "website-extractor") return <WebsiteExtractorPanel />;
+  if (slug === "fence-bible") return <FenceBiblePage />;
 
   if (!page) return null;
   const bulletSets: Record<string, string[]> = {
