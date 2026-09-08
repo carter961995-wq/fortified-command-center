@@ -13,6 +13,8 @@ type SettingsPayload = {
   openApiUrl?: string;
   importUrl?: string;
   snapshotUrl?: string;
+  knowledgeUrl?: string;
+  updateUrl?: string;
   instructions?: string;
   importLog?: Array<{ at: string; summary: string; counts: Record<string, number> }>;
   knowledgeCount?: number;
@@ -80,10 +82,11 @@ export function GptBridgePanel() {
           <Bot className="size-5" />
         </span>
         <div>
-          <h2 className="text-lg font-black text-white">Fortified GPT bridge</h2>
+          <h2 className="text-lg font-black text-white">Make Fortified GPT a team member</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-300">
-            Connect the Custom GPT you already use for Fortified. It can push customers, job sites, subcontractors,
-            projects, and shop knowledge into this Command Center, then dispatch crews against those records.
+            Connect your Custom GPT so it can read and write the live shop: customers, jobs, crews, SOP, guidelines,
+            pricing, and dispatch. After it is connected, tell it to update a customer or the company SOP and it should
+            save into Clients or Fence Bible in the same turn — not only in the chat.
           </p>
         </div>
       </div>
@@ -106,15 +109,19 @@ export function GptBridgePanel() {
       <div className="grid gap-3">
         <CopyRow label="Schema URL" value={settings.openApiUrl} copied={copied} onCopy={copy} />
         <CopyRow label="API key" value={settings.apiKey ?? ""} copied={copied} onCopy={copy} secret />
+        <CopyRow label="Read snapshot" value={settings.snapshotUrl} copied={copied} onCopy={copy} />
+        <CopyRow label="Write / update" value={settings.updateUrl} copied={copied} onCopy={copy} />
         <CopyRow label="Import endpoint" value={settings.importUrl} copied={copied} onCopy={copy} />
+        <CopyRow label="Knowledge / SOP endpoint" value={settings.knowledgeUrl} copied={copied} onCopy={copy} />
       </div>
 
       <ol className="grid gap-2 rounded-xl border border-[#223758] bg-[#0c172b] p-4 text-sm leading-6 text-slate-300">
-        <li>1. In ChatGPT, open your Fortified GPT → Configure → Actions → Create new action.</li>
-        <li>2. Import the schema URL above. Authentication is API Key, Auth Type Bearer, header `Authorization`.</li>
-        <li>3. Paste the API key as the Bearer token.</li>
-        <li>4. Add the GPT instructions below so it transfers what it already knows instead of keeping a second copy in chat.</li>
-        <li>5. If this app is only on your Mac, expose it with a public HTTPS tunnel (Cloudflare Tunnel or ngrok) and use that origin in the schema URL.</li>
+        <li>1. This app must be on a public HTTPS URL. ChatGPT cannot call localhost. Use Cloudflare Tunnel or ngrok, then reload Settings so the schema URL uses that origin.</li>
+        <li>2. In ChatGPT, open your Fortified GPT → Configure → Actions → Create new action.</li>
+        <li>3. Import the schema URL. Authentication is API Key, Auth Type Bearer, header `Authorization`.</li>
+        <li>4. Paste the API key as the Bearer token.</li>
+        <li>5. Replace the GPT instructions with the block below so it behaves as a shop teammate: read snapshot, then write customers, SOP, guidelines, and pricing into this app.</li>
+        <li>6. Test in the GPT: “Show me current customers” (snapshot) then “Update our chain-link labor rate in pricing” (write). Confirm Fence Bible and Clients changed.</li>
       </ol>
 
       <div className="rounded-xl border border-[#223758] bg-[#0c172b] p-4">

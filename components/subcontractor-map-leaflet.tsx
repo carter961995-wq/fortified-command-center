@@ -7,8 +7,7 @@ import { milesToMeters } from "../src/lib/subcontractors/geo";
 import type { SubcontractorMapPin, WorkOrderMapPin } from "../lib/subcontractor-pins";
 
 const STREET_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
-const SATELLITE_TILES =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const SATELLITE_TILES = "https://{s}.google.com/vt/lyrs=s&hl=en&x={x}&y={y}&z={z}&scale=2";
 const LABEL_TILES =
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
@@ -82,19 +81,22 @@ export default function SubcontractorMapLeaflet({
       center={DEFAULT_CENTER}
       zoom={6}
       minZoom={4}
-      maxZoom={18}
+      maxZoom={22}
       scrollWheelZoom
       className="h-full min-h-[560px] w-full"
     >
       <TileLayer
         attribution={
           satellite
-            ? "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics"
-            : "Tiles &copy; Esri &mdash; Esri, TomTom, Garmin, FAO, NOAA, USGS"
+            ? "Imagery &copy; Google"
+            : "Tiles &copy; Esri — Esri, TomTom, Garmin, FAO, NOAA, USGS"
         }
         url={satellite ? SATELLITE_TILES : STREET_TILES}
-        maxNativeZoom={19}
-        maxZoom={18}
+        subdomains={satellite ? ["mt0", "mt1", "mt2", "mt3"] : undefined}
+        maxNativeZoom={satellite ? 22 : 19}
+        maxZoom={22}
+        keepBuffer={6}
+        updateWhenZooming={false}
       />
       {satellite ? <TileLayer url={LABEL_TILES} pane="overlayPane" /> : null}
       <FitPins subPins={subcontractors} jobPins={workOrders} selectedId={selectedId} />

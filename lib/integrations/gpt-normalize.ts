@@ -134,3 +134,24 @@ export function asDate(value: unknown) {
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString().slice(0, 10);
 }
+
+export const KNOWLEDGE_CATEGORIES = ["sop", "guideline", "pricing", "script", "vendor", "general"] as const;
+export type KnowledgeCategory = (typeof KNOWLEDGE_CATEGORIES)[number];
+
+export function normalizeKnowledgeCategory(value: unknown, fallback: KnowledgeCategory = "general"): KnowledgeCategory {
+  const text = matchKey(value);
+  if (!text) return fallback;
+  if (text.includes("pric") || text.includes("rate") || text.includes("nte") || text.includes("labor") || text.includes("quote math")) {
+    return "pricing";
+  }
+  if (text.includes("sop") || text.includes("standard operating") || text.includes("procedure") || text.includes("playbook") || text.includes("dispatch")) {
+    return "sop";
+  }
+  if (text.includes("guideline") || text.includes("policy") || text.includes("policies") || text.includes("standard")) {
+    return "guideline";
+  }
+  if (text.includes("script") || text.includes("talk track") || text.includes("call flow")) return "script";
+  if (text.includes("vendor") || text.includes("supplier")) return "vendor";
+  if ((KNOWLEDGE_CATEGORIES as readonly string[]).includes(text)) return text as KnowledgeCategory;
+  return fallback;
+}

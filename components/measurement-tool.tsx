@@ -12,6 +12,7 @@ import {
   Satellite,
   Undo2,
 } from "lucide-react";
+import { geodesicFeet } from "../lib/geo/geodesic";
 import type {
   MeasurementMapTarget,
   MeasurementPoint,
@@ -33,23 +34,8 @@ type GeocodeResult = {
   display_name: string;
 };
 
-const EARTH_RADIUS_FEET = 20_925_524.9;
-
-function toRadians(degrees: number) {
-  return (degrees * Math.PI) / 180;
-}
-
 function feetBetween(a: Pick<MeasurementPoint, "lat" | "lng">, b: Pick<MeasurementPoint, "lat" | "lng">) {
-  const deltaLat = toRadians(b.lat - a.lat);
-  const deltaLng = toRadians(b.lng - a.lng);
-  const lat1 = toRadians(a.lat);
-  const lat2 = toRadians(b.lat);
-
-  const haversine =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
-
-  return 2 * EARTH_RADIUS_FEET * Math.asin(Math.sqrt(haversine));
+  return geodesicFeet(a, b);
 }
 
 function formatFeet(feet: number, digits = 1) {
@@ -161,7 +147,7 @@ export function MeasurementTool() {
 
       setMapTarget({
         center: [lat, lng],
-        zoom: 20,
+        zoom: 21,
         token: Date.now(),
       });
       setSearchStatus("found");
@@ -210,8 +196,9 @@ export function MeasurementTool() {
             Measurement Tool
           </h1>
           <p className="mt-1 max-w-3xl text-sm font-semibold leading-6 text-slate-400">
-            Measure property lines, fence runs, and gate openings from aerial imagery. Click
-            endpoints in order and the tool calculates each segment plus total linear feet.
+            Measure property lines, fence runs, and gate openings from high-zoom satellite. Zoom in
+            until site details are sharp, then click exact endpoints. Distances use a WGS-84 ground
+            calculation in linear feet.
           </p>
         </div>
         <div className="rounded-xl border border-[#1f304d] bg-[#111f38] px-4 py-3 text-sm font-black text-white">
@@ -372,9 +359,9 @@ export function MeasurementTool() {
           </section>
 
           <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs font-semibold leading-5 text-amber-100">
-            Aerial measurements are useful for estimating and material takeoffs. Confirm final
-            legal property boundaries against survey/GIS records before treating a line as a
-            recorded property boundary.
+            Use Google Satellite and zoom to 21+ so posts, gates, vehicles, and yard details are
+            readable before you click. Aerial takeoffs are for estimating — confirm legal boundaries
+            against a survey when it matters.
           </section>
         </aside>
       </div>
