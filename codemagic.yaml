@@ -195,6 +195,7 @@ workflows:
       - name: Build Windows desktop app
         script: |
           npm run desktop:dist:win
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node -e "const fs=require('fs'); for (const name of fs.readdirSync('dist-desktop')) console.log(name);"
 
     # Codemagic only exposes some extensions as standalone downloads (zip, app, ...).
