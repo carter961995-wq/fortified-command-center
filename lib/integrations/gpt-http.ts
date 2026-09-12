@@ -175,8 +175,8 @@ async function handleSettings(request: Request) {
         tested: true,
         demoMode: isDemoMode(),
         counts: snap.counts,
-        knowledge: snap.knowledge.length,
-        business: snap.business.companyName || null,
+        knowledgeCount: snap.counts.knowledge,
+        business: snap.business,
       });
     }
   }

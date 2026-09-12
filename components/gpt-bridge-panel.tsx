@@ -95,7 +95,7 @@ export function GptBridgePanel() {
       setSettings((current) => ({ ...(current ?? {}), ...body }));
       const counts = body.counts ?? {};
       setTestMessage(
-        `Bridge is live. GPT can currently read ${counts.customers ?? 0} customers, ${counts.workOrders ?? 0} jobs, ${counts.subcontractors ?? 0} crews, and ${body.knowledge ?? 0} Fence Bible notes.`
+        `Bridge is live. GPT can currently read ${counts.customers ?? 0} customers, ${counts.workOrders ?? 0} jobs, ${counts.subcontractors ?? 0} crews, and ${counts.knowledge ?? body.knowledgeCount ?? 0} Fence Bible notes.`
       );
     } catch (error) {
       setTestMessage(error instanceof Error ? error.message : "Bridge test failed.");
