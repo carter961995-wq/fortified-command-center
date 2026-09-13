@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Loader2, MapPin, Plus, Radar, Search, Satellite } from "lucide-react";
 import { assignWorkOrderSubcontractor } from "../lib/actions";
@@ -24,6 +25,7 @@ export function SubcontractorMapPanel({
   subcontractors: SubcontractorMapPin[];
   workOrders: WorkOrderMapPin[];
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [satellite, setSatellite] = useState(false);
@@ -42,8 +44,11 @@ export function SubcontractorMapPanel({
   }, [query, subcontractors]);
 
   const selected = visibleSubs.find((pin) => pin.id === selectedId) ?? subcontractors.find((pin) => pin.id === selectedId);
-  const openJobs = workOrders.filter((job) => !["Closed", "Cancelled", "Paid"].includes(job.status));
-  const unassignedJobs = openJobs.filter((job) => !job.subcontractorId);
+  const openJobs = useMemo(
+    () => workOrders.filter((job) => !["Closed", "Cancelled", "Paid"].includes(job.status)),
+    [workOrders]
+  );
+  const unassignedJobs = useMemo(() => openJobs.filter((job) => !job.subcontractorId), [openJobs]);
 
   async function dispatchJob(workOrderId: string) {
     if (!selected) return;
@@ -52,6 +57,7 @@ export function SubcontractorMapPanel({
     try {
       const result = await assignWorkOrderSubcontractor(workOrderId, selected.id);
       setDispatchMessage(result.error ?? `Dispatched ${selected.companyName} to the job.`);
+      if (!result.error) router.refresh();
     } catch (error) {
       setDispatchMessage(error instanceof Error ? error.message : "Dispatch failed.");
     } finally {
@@ -129,7 +135,7 @@ export function SubcontractorMapPanel({
             {satellite ? "Street map" : "Satellite"}
           </button>
         </div>
-        <div className="relative min-h-[560px]">
+        <div className="relative h-[560px] min-h-[560px] w-full">
           <LeafletMap
             subcontractors={visibleSubs}
             workOrders={openJobs}

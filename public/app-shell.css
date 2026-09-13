@@ -46,6 +46,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app-btn-primary { background: #f97316; color: #0b1220; }
 .app-btn-secondary { border: 1px solid #64748b; background: #1e293b; color: #fff; }
 
+.leaflet-container {
+  background: #d7e3ea;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.subcontractor-leaflet-map,
+.subcontractor-leaflet-map.leaflet-container {
+  width: 100%;
+  height: 560px;
+  min-height: 560px;
+}
+
 @media (min-width: 768px) {
   .app-sidebar { display: flex; position: sticky; top: 0; height: 100vh; }
   .app-mobile-bar { display: none; }

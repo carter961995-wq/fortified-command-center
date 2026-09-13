@@ -8,6 +8,8 @@ const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
   outputFileTracingRoot: projectRoot,
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+  transpilePackages: ["leaflet", "react-leaflet", "@react-leaflet/core"],
   serverExternalPackages: ["pdf-lib", "@react-pdf/renderer"],
 };
 

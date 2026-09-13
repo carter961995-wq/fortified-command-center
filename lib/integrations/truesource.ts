@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { upsertJobIntakeFromSource } from "./job-intake";
+import { isDemoMode } from "../env";
 
 export type TruesourceConnection = {
   provider: "truesource";
@@ -71,17 +72,38 @@ export async function syncTruesourceJobs(): Promise<TruesourceSyncResult> {
     };
   }
 
-  if (connection.mode === "email_bridge") {
+  if (connection.mode === "email_bridge" && !isDemoMode()) {
+    const { loadGoogleConnection, syncGoogleWorkspace } = await import("./google");
+    const google = await loadGoogleConnection();
+    if (!google) {
+      return {
+        syncedAt,
+        mode: "email_bridge",
+        imported: 0,
+        message: "Email bridge is on. Connect Gmail in Job Sources, then sync to import TrueSource assignment emails.",
+        jobs: [],
+      };
+    }
+    const summary = await syncGoogleWorkspace();
+    const imported = summary.jobIntake?.imported ?? 0;
+    const updated = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
+    await saveTruesourceConnection(updated);
     return {
       syncedAt,
       mode: "email_bridge",
-      imported: 0,
-      message: "Email bridge mode is active. Run Google Workspace sync to import TrueSource / Affiliate Connect assignment emails.",
-      jobs: [],
+      imported,
+      message:
+        imported > 0
+          ? `Gmail bridge imported ${imported} TrueSource-style assignment(s) into Job Intake.`
+          : "Gmail bridge is live. No new TrueSource assignment emails were found.",
+      jobs: (summary.jobIntake?.records ?? []).map((record) => ({
+        sourceRef: record.sourceRef,
+        title: record.description || record.workOrderNumber || "TrueSource job",
+      })),
     };
   }
 
-  if (connection.mode === "session_sync") {
+  if (connection.mode === "session_sync" || (connection.mode === "email_bridge" && isDemoMode())) {
     const demoBody = `TrueSource Affiliate Connect assignment
 
 Customer: ${connection.email.split("@")[0] || "National Account"}
@@ -119,7 +141,7 @@ Email: dispatch@truesource.com`;
 
     return {
       syncedAt,
-      mode: "session_sync",
+      mode: connection.mode,
       imported: created ? 1 : 0,
       message: created
         ? "Imported a sample TrueSource / Affiliate Connect job into Job Intake."

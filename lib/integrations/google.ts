@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { looksLikeJobAssignmentEmail, upsertJobIntakeFromSource } from "./job-intake";
+import { isDemoMode } from "../env";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -16,6 +17,13 @@ export const googleScopes = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/contacts.readonly",
 ];
+
+export const DEMO_GOOGLE_TOKEN = "demo-token";
+
+export function isDemoGoogleConnection(connection: { accessToken?: string } | null | undefined) {
+  const token = connection?.accessToken ?? "";
+  return token === DEMO_GOOGLE_TOKEN || token.startsWith("demo-");
+}
 
 export type GoogleConnection = {
   provider: "google";
@@ -222,6 +230,10 @@ export async function getValidGoogleAccessToken() {
   const connection = await loadGoogleConnection();
   if (!connection) throw new Error("Google is not connected.");
 
+  if (isDemoMode() || isDemoGoogleConnection(connection)) {
+    return { accessToken: connection.accessToken, connection };
+  }
+
   if (connection.expiresAt > Date.now() + 60_000) {
     return { accessToken: connection.accessToken, connection };
   }
@@ -385,7 +397,10 @@ export async function sendApprovedGmailDraft(input: {
   subject: string;
   body: string;
 }) {
-  const { accessToken } = await getValidGoogleAccessToken();
+  const { accessToken, connection } = await getValidGoogleAccessToken();
+  if (isDemoMode() || isDemoGoogleConnection(connection)) {
+    return { id: `demo-gmail-${Date.now()}`, threadId: `demo-thread-${Date.now()}` };
+  }
   const headers = [
     `To: ${input.to}`,
     input.cc ? `Cc: ${input.cc}` : null,
@@ -418,7 +433,159 @@ export async function sendApprovedGmailDraft(input: {
   return data as { id: string; threadId?: string };
 }
 
+async function syncDemoGoogleWorkspace(connection: GoogleConnection): Promise<GoogleSyncSummary> {
+  const now = new Date().toISOString();
+  const messages = [
+    {
+      id: "demo-gmail-mhelpdesk",
+      threadId: "demo-thread-mhelpdesk",
+      subject: "mHelpDesk · Work order assigned · Store 104",
+      from: "alerts@mhelpdesk.com",
+      date: now,
+      snippet: "New job assigned: Canal Street Store gate operator reverse fault.",
+    },
+    {
+      id: "demo-gmail-truesource",
+      threadId: "demo-thread-truesource",
+      subject: "TrueSource Affiliate Connect · Ticket assigned",
+      from: "dispatch@truesource.com",
+      date: now,
+      snippet: "Affiliate Connect assignment for Kenner Shopping Center dock gate.",
+    },
+    {
+      id: "demo-gmail-internal",
+      threadId: "demo-thread-internal",
+      subject: "Work order WO-45821 assigned · Store 1842",
+      from: "jobs@fortified.local",
+      date: now,
+      snippet: "Repair damaged chain link at loading dock. DNE $850.",
+    },
+  ];
+
+  const bodies: Record<string, string> = {
+    "demo-gmail-mhelpdesk": `mHelpDesk assignment
+Customer: Bayou Retail Group
+Store #: 104
+Location: Canal Street Store
+Address: 410 Canal St
+City: New Orleans
+State: LA
+Zip: 70130
+Work Order #: MHD-10418
+Description: Gate operator reverse fault
+Details: Operator reverses mid-cycle. Check photo eyes and close limits.
+DNE: $1200.00
+Timeframe: Next available business day
+Priority: Urgent
+Contact: Tina Flores
+Phone: 504-555-0138
+Email: canal-store@bayou-retail.example`,
+    "demo-gmail-truesource": `TrueSource Affiliate Connect assignment
+Customer: Bayou Retail Group
+Store #: 219
+Location: Kenner Shopping Center
+Address: 2800 Veterans Blvd
+City: Kenner
+State: LA
+Zip: 70062
+Work Order #: TS-21944
+Description: Dock safety gate inspection
+Details: Affiliate Connect dispatch. Inspect adjacent safety gate and operator.
+DNE: $1800.00
+Timeframe: 24 hour response
+Priority: High
+Contact: TrueSource Dispatch
+Email: dispatch@truesource.com`,
+    "demo-gmail-internal": `New work order assigned
+Customer: Retail Facilities Group
+Store #: 1842
+Location: SuperMart #1842
+Address: 1200 Commerce Pkwy
+City: Dallas
+State: TX
+Zip: 75201
+Work Order #: WO-45821
+Description: Repair damaged chain link at loading dock
+Details: Panel bent near dock door 3. Replace fabric and retension.
+DNE: $850.00
+Timeframe: Complete within 5 business days
+Priority: High
+Contact: Dana Ruiz
+Phone: (214) 555-0198
+Email: dana.ruiz@example.com`,
+  };
+
+  const records: NonNullable<GoogleSyncSummary["jobIntake"]>["records"] = [];
+  let imported = 0;
+  let updated = 0;
+
+  for (const message of messages) {
+    const { record, created } = await upsertJobIntakeFromSource({
+      source: "gmail",
+      sourceRef: message.id,
+      receivedAt: now,
+      subject: message.subject,
+      from: message.from,
+      snippet: message.snippet,
+      rawText: bodies[message.id] ?? message.snippet,
+    });
+    if (created) imported += 1;
+    else updated += 1;
+    records.push({
+      id: record.id,
+      sourceRef: record.sourceRef,
+      workOrderNumber: record.parsed.workOrderNumber,
+      storeNumber: record.parsed.storeNumber,
+      description: record.parsed.description,
+      created,
+    });
+  }
+
+  const summary: GoogleSyncSummary = {
+    syncedAt: now,
+    gmail: { messages },
+    drive: {
+      files: [
+        {
+          id: "demo-drive-site-photo",
+          name: "Canal-Street-gate-photo.jpg",
+          mimeType: "image/jpeg",
+          modifiedTime: now,
+          webViewLink: "https://drive.google.com/file/d/demo-drive-site-photo/view",
+        },
+      ],
+    },
+    calendar: {
+      events: [
+        {
+          id: "demo-cal-site",
+          summary: "Site visit · Canal Street Store",
+          start: now,
+          end: now,
+        },
+      ],
+    },
+    jobIntake: {
+      scanned: messages.length,
+      imported,
+      updated,
+      records,
+    },
+    gemini: { configured: Boolean(process.env.GEMINI_API_KEY) },
+  };
+
+  const updatedConnection: GoogleConnection = { ...connection, updatedAt: now };
+  await saveGoogleConnection(updatedConnection);
+  await saveLastSync(summary);
+  return summary;
+}
+
 export async function syncGoogleWorkspace() {
+  const connection = await loadGoogleConnection();
+  if (!connection) throw new Error("Google is not connected.");
+  if (isDemoMode() || isDemoGoogleConnection(connection)) {
+    return syncDemoGoogleWorkspace(connection);
+  }
   const { accessToken } = await getValidGoogleAccessToken();
   const jobQuery = encodeURIComponent(
     "newer_than:30d (subject:(work order OR assigned OR job OR dispatch OR ticket) OR (work order OR store # OR DNE OR NTE OR mhelpdesk))"

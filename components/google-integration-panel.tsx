@@ -4,6 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { CheckCircle2, Copy, Link2, RefreshCw, Unplug } from "lucide-react";
 
 type Status = {
+  demoMode?: boolean;
+  demoMailbox?: boolean;
   googleOAuthConfigured: boolean;
   geminiConfigured: boolean;
   connected: boolean;
@@ -72,10 +74,23 @@ export function GoogleIntegrationPanel({ message }: { message?: string }) {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <StatusCard label="Google OAuth" ok={status.googleOAuthConfigured} okText="Configured" missingText="Needs client ID/secret" />
+        <StatusCard
+          label="Google OAuth"
+          ok={status.googleOAuthConfigured || Boolean(status.demoMailbox)}
+          okText={status.demoMailbox ? "Demo mailbox" : "Configured"}
+          missingText="Needs client ID/secret"
+        />
         <StatusCard label="Google Account" ok={status.connected} okText={status.email ?? "Connected"} missingText="Not connected" />
-        <StatusCard label="Gemini" ok={status.geminiConfigured} okText="API key set" missingText="Needs GEMINI_API_KEY" />
+        <StatusCard label="Gemini" ok={status.geminiConfigured} okText="API key set" missingText={status.demoMode ? "Optional in demo" : "Needs GEMINI_API_KEY"} />
       </div>
+
+      {status.demoMailbox ? (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-100">
+          Demo Gmail is live as <span className="font-mono">{status.email}</span>. Sync pulls mHelpDesk and TrueSource
+          assignment emails into Job Intake. Add real <span className="font-mono">GOOGLE_CLIENT_ID</span> / secret later
+          for live Workspace OAuth.
+        </div>
+      ) : null}
 
       <div className="rounded-xl border border-[#223758] bg-[#0c172b] p-4">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -95,7 +110,7 @@ export function GoogleIntegrationPanel({ message }: { message?: string }) {
               aria-disabled={!status.googleOAuthConfigured}
             >
               <Link2 className="mr-2 size-4" />
-              {status.connected ? "Reconnect Google" : "Connect Google"}
+              {status.connected && !status.demoMailbox ? "Reconnect Google" : "Connect Google"}
             </a>
             {status.connected ? (
               <button className="rounded-lg border border-[#2b4168] px-4 py-2 text-sm font-black text-slate-200" onClick={disconnect} disabled={isPending}>

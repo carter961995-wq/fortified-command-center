@@ -13,6 +13,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <head>
         <link rel="stylesheet" href="/app-shell.css" />
+        <link rel="stylesheet" href="/leaflet.css" />
       </head>
       <body className="app-body">
         <AppShellStyles />
