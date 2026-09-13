@@ -8,6 +8,7 @@ function isLaunchPublic(pathname: string) {
   return (
     pathname === "/api/health" ||
     pathname === "/app-shell.css" ||
+    pathname === "/leaflet.css" ||
     pathname.startsWith("/api/gpt/") ||
     pathname.startsWith("/_next/")
   );
@@ -50,5 +51,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|app-shell.css|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|app-shell.css|leaflet.css|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"]
 };

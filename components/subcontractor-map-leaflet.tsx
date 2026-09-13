@@ -12,12 +12,47 @@ const LABEL_TILES =
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
 
 const DEFAULT_CENTER: [number, number] = [32.6, -90.2];
+const MAP_SIZE = { width: "100%", height: "560px" } as const;
 
 function statusColor(status: string) {
   const value = status.toLowerCase();
   if (value === "blocked") return "#ef4444";
   if (value === "probation" || value === "inactive") return "#f59e0b";
   return "#10b981";
+}
+
+function pinViewKey(subPins: SubcontractorMapPin[], jobPins: WorkOrderMapPin[]) {
+  return [
+    ...subPins.map((pin) => `${pin.id}:${pin.lat}:${pin.lng}`),
+    ...jobPins.map((pin) => `${pin.id}:${pin.lat}:${pin.lng}`),
+  ].join("|");
+}
+
+function SyncMapSize() {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    const sync = () => {
+      map.invalidateSize({ animate: false });
+    };
+
+    sync();
+    const frame = window.requestAnimationFrame(sync);
+    const timeouts = [80, 250, 600, 1200].map((ms) => window.setTimeout(sync, ms));
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
+    observer?.observe(container);
+    window.addEventListener("resize", sync);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      timeouts.forEach((handle) => window.clearTimeout(handle));
+      observer?.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [map]);
+
+  return null;
 }
 
 function FitPins({
@@ -30,11 +65,7 @@ function FitPins({
   selectedId?: string;
 }) {
   const map = useMap();
-
-  useEffect(() => {
-    const handle = window.setTimeout(() => map.invalidateSize(), 60);
-    return () => window.clearTimeout(handle);
-  }, [map]);
+  const viewKey = pinViewKey(subPins, jobPins);
 
   useEffect(() => {
     const selected = subPins.find((pin) => pin.id === selectedId);
@@ -56,7 +87,7 @@ function FitPins({
       return;
     }
     map.fitBounds(L.latLngBounds(points), { padding: [36, 36], maxZoom: 8 });
-  }, [jobPins, map, selectedId, subPins]);
+  }, [jobPins, map, selectedId, subPins, viewKey]);
 
   return null;
 }
@@ -78,12 +109,14 @@ export default function SubcontractorMapLeaflet({
 }) {
   return (
     <MapContainer
+      key={satellite ? "satellite" : "street"}
       center={DEFAULT_CENTER}
       zoom={6}
       minZoom={4}
       maxZoom={22}
       scrollWheelZoom
-      className="h-full min-h-[560px] w-full"
+      className="subcontractor-leaflet-map h-[560px] w-full"
+      style={MAP_SIZE}
     >
       <TileLayer
         attribution={
@@ -99,6 +132,7 @@ export default function SubcontractorMapLeaflet({
         updateWhenZooming={false}
       />
       {satellite ? <TileLayer url={LABEL_TILES} pane="overlayPane" /> : null}
+      <SyncMapSize />
       <FitPins subPins={subcontractors} jobPins={workOrders} selectedId={selectedId} />
 
       {subcontractors.map((pin) => {

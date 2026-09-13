@@ -5,7 +5,11 @@ import { isDemoMode } from "@/lib/demo-mode";
 const PUBLIC_PREFIXES = ["/login", "/api/health", "/api/gpt"];
 
 export async function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname === "/api/health" || request.nextUrl.pathname === "/app-shell.css") {
+  if (
+    request.nextUrl.pathname === "/api/health" ||
+    request.nextUrl.pathname === "/app-shell.css" ||
+    request.nextUrl.pathname === "/leaflet.css"
+  ) {
     return NextResponse.next();
   }
 
@@ -88,5 +92,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|app-shell.css).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|app-shell.css|leaflet.css).*)"],
 };

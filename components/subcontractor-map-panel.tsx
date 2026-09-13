@@ -2,7 +2,8 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, MapPin, Plus, Radar, Search, Satellite } from "lucide-react";
 import { assignWorkOrderSubcontractor } from "../lib/actions";
 import type { SubcontractorMapPin, WorkOrderMapPin } from "../lib/subcontractor-pins";
@@ -24,11 +25,21 @@ export function SubcontractorMapPanel({
   subcontractors: SubcontractorMapPin[];
   workOrders: WorkOrderMapPin[];
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [satellite, setSatellite] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMapReady(true));
+    return () => {
+      window.cancelAnimationFrame(frame);
+      setMapReady(false);
+    };
+  }, []);
 
   const visibleSubs = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -42,8 +53,11 @@ export function SubcontractorMapPanel({
   }, [query, subcontractors]);
 
   const selected = visibleSubs.find((pin) => pin.id === selectedId) ?? subcontractors.find((pin) => pin.id === selectedId);
-  const openJobs = workOrders.filter((job) => !["Closed", "Cancelled", "Paid"].includes(job.status));
-  const unassignedJobs = openJobs.filter((job) => !job.subcontractorId);
+  const openJobs = useMemo(
+    () => workOrders.filter((job) => !["Closed", "Cancelled", "Paid"].includes(job.status)),
+    [workOrders]
+  );
+  const unassignedJobs = useMemo(() => openJobs.filter((job) => !job.subcontractorId), [openJobs]);
 
   async function dispatchJob(workOrderId: string) {
     if (!selected) return;
@@ -52,6 +66,7 @@ export function SubcontractorMapPanel({
     try {
       const result = await assignWorkOrderSubcontractor(workOrderId, selected.id);
       setDispatchMessage(result.error ?? `Dispatched ${selected.companyName} to the job.`);
+      if (!result.error) router.refresh();
     } catch (error) {
       setDispatchMessage(error instanceof Error ? error.message : "Dispatch failed.");
     } finally {
@@ -129,15 +144,22 @@ export function SubcontractorMapPanel({
             {satellite ? "Street map" : "Satellite"}
           </button>
         </div>
-        <div className="relative min-h-[560px]">
-          <LeafletMap
-            subcontractors={visibleSubs}
-            workOrders={openJobs}
-            selectedId={selected?.id}
-            satellite={satellite}
-            onSelectSubcontractor={(pin) => setSelectedId(pin.id)}
-            onSelectWorkOrder={() => undefined}
-          />
+        <div className="relative h-[560px] min-h-[560px] w-full">
+          {mapReady ? (
+            <LeafletMap
+              subcontractors={visibleSubs}
+              workOrders={openJobs}
+              selectedId={selected?.id}
+              satellite={satellite}
+              onSelectSubcontractor={(pin) => setSelectedId(pin.id)}
+              onSelectWorkOrder={() => undefined}
+            />
+          ) : (
+            <div className="flex h-full min-h-[560px] items-center justify-center bg-[#d7e3ea] text-sm font-bold text-slate-600">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Loading street map...
+            </div>
+          )}
         </div>
         {selected ? (
           <div className="border-t border-[#1f304d] bg-[#111f38] p-4">
