@@ -103,6 +103,11 @@ async function ensureDir() {
   await mkdir(integrationDir(), { recursive: true });
 }
 
+async function mhelpdeskPushStatus(): Promise<"ready" | "needs_connection"> {
+  const { loadMhelpdeskConnection } = await import("./mhelpdesk");
+  return (await loadMhelpdeskConnection()) ? "ready" : "needs_connection";
+}
+
 export async function loadJobIntakeStore(): Promise<JobIntakeStore> {
   try {
     const raw = await readFile(intakePath(), "utf8");
@@ -374,7 +379,7 @@ export async function upsertJobIntakeFromSource(input: {
     workOrderId: null,
     emailDraft: null,
     mhelpdeskPush: {
-      status: "needs_connection",
+      status: await mhelpdeskPushStatus(),
       fieldMap: buildMhelpdeskFieldMap({
         id: "tmp",
         status: "new",
@@ -395,7 +400,7 @@ export async function upsertJobIntakeFromSource(input: {
   };
   record.emailDraft = buildDefaultEmailDraft(record);
   record.mhelpdeskPush = {
-    status: "needs_connection",
+    status: await mhelpdeskPushStatus(),
     fieldMap: buildMhelpdeskFieldMap(record),
     updatedAt: now,
   };
@@ -442,7 +447,26 @@ export async function updateJobIntakeRecord(
 
 export async function ensureSeedJobIntake() {
   const store = await loadJobIntakeStore();
-  if (store.records.length > 0) return store;
+  const pushStatus = await mhelpdeskPushStatus();
+  if (store.records.length > 0) {
+    if (pushStatus === "ready" && store.records.some((record) => record.mhelpdeskPush?.status === "needs_connection")) {
+      const records = store.records.map((record) =>
+        record.mhelpdeskPush?.status === "needs_connection"
+          ? {
+              ...record,
+              mhelpdeskPush: {
+                ...record.mhelpdeskPush,
+                status: "ready" as const,
+                error: undefined,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : record
+      );
+      return saveJobIntakeStore({ ...store, records });
+    }
+    return store;
+  }
 
   const sampleBody = `New work order assigned
 
