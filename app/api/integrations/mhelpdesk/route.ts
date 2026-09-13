@@ -6,8 +6,11 @@ import {
   syncMhelpdeskJobs,
   type MhelpdeskConnection,
 } from "../../../../lib/integrations/mhelpdesk";
+import { isDemoMode } from "../../../../lib/env";
+import { ensureDemoIntegrations } from "../../../../lib/integrations/demo-bootstrap";
 
 export async function GET() {
+  if (isDemoMode()) await ensureDemoIntegrations();
   const connection = await loadMhelpdeskConnection();
   return NextResponse.json({
     ok: true,

@@ -222,10 +222,19 @@ export default async function DashboardPage() {
 
         <DashboardPanel title="What to do next" icon={BriefcaseBusiness}>
           <div className="grid gap-3">
-            <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-sources">
-              <p className="font-black text-white">1. Connect mHelpDesk or TrueSource</p>
-              <p className="mt-1 text-sm font-semibold text-slate-200">Save the login / email bridge. Do not keep working inside those apps.</p>
-            </Link>
+            {sources.every((source) => source.connected) ? (
+              <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">
+                <p className="font-black text-white">1. Sources are live — open Job Intake</p>
+                <p className="mt-1 text-sm font-semibold text-slate-200">
+                  mHelpDesk, TrueSource, and Gmail are connected. Sync or pick a parsed job and accept it onto the board.
+                </p>
+              </Link>
+            ) : (
+              <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-sources">
+                <p className="font-black text-white">1. Connect mHelpDesk or TrueSource</p>
+                <p className="mt-1 text-sm font-semibold text-slate-200">Save the login / email bridge. Do not keep working inside those apps.</p>
+              </Link>
+            )}
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">
               <p className="font-black text-white">2. Open Job Intake and select a job</p>
               <p className="mt-1 text-sm font-semibold text-slate-200">Add notes, set a date, then accept it onto the board.</p>

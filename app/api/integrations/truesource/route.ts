@@ -6,8 +6,11 @@ import {
   syncTruesourceJobs,
   type TruesourceConnection,
 } from "../../../../lib/integrations/truesource";
+import { isDemoMode } from "../../../../lib/env";
+import { ensureDemoIntegrations } from "../../../../lib/integrations/demo-bootstrap";
 
 export async function GET() {
+  if (isDemoMode()) await ensureDemoIntegrations();
   const connection = await loadTruesourceConnection();
   return NextResponse.json({
     ok: true,

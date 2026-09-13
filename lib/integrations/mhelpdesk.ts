@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { JobIntakeRecord, MhelpdeskFieldMap } from "./job-intake";
 import { upsertJobIntakeFromSource } from "./job-intake";
+import { isDemoMode } from "../env";
 
 export type MhelpdeskConnection = {
   provider: "mhelpdesk";
@@ -80,17 +81,38 @@ export async function syncMhelpdeskJobs(): Promise<MhelpdeskSyncResult> {
     };
   }
 
-  if (connection.mode === "email_bridge") {
+  if (connection.mode === "email_bridge" && !isDemoMode()) {
+    const { loadGoogleConnection, syncGoogleWorkspace } = await import("./google");
+    const google = await loadGoogleConnection();
+    if (!google) {
+      return {
+        syncedAt,
+        mode: "email_bridge",
+        imported: 0,
+        message: "Email bridge is on. Connect Gmail in Job Sources, then sync to import mHelpDesk assignment emails.",
+        jobs: [],
+      };
+    }
+    const summary = await syncGoogleWorkspace();
+    const imported = summary.jobIntake?.imported ?? 0;
+    const updated = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
+    await saveMhelpdeskConnection(updated);
     return {
       syncedAt,
       mode: "email_bridge",
-      imported: 0,
-      message: "Email bridge mode is active. Run Google Workspace sync to import mHelpDesk assignment emails.",
-      jobs: [],
+      imported,
+      message:
+        imported > 0
+          ? `Gmail bridge imported ${imported} mHelpDesk-style assignment(s) into Job Intake.`
+          : "Gmail bridge is live. No new mHelpDesk assignment emails were found.",
+      jobs: (summary.jobIntake?.records ?? []).map((record) => ({
+        sourceRef: record.sourceRef,
+        title: record.description || record.workOrderNumber || "mHelpDesk job",
+      })),
     };
   }
 
-  if (connection.mode === "session_sync") {
+  if (connection.mode === "session_sync" || (connection.mode === "email_bridge" && isDemoMode())) {
     // Placeholder until tenant-specific session/API access is configured.
     // Intentionally does not scrape live sites without an approved integration path.
     const demoBody = `mHelpDesk dashboard alert
@@ -130,7 +152,7 @@ Email: facilities@example.com`;
 
     return {
       syncedAt,
-      mode: "session_sync",
+      mode: connection.mode,
       imported: created ? 1 : 0,
       message: created
         ? "Imported a sample mHelpDesk-style alert into Job Intake. Replace session_sync with your tenant connector when available."

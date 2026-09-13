@@ -4,8 +4,11 @@ import {
   parseJobAssignmentText,
   upsertJobIntakeFromSource,
 } from "../../../../lib/integrations/job-intake";
+import { isDemoMode } from "../../../../lib/env";
+import { ensureDemoIntegrations } from "../../../../lib/integrations/demo-bootstrap";
 
 export async function GET() {
+  if (isDemoMode()) await ensureDemoIntegrations();
   const store = await ensureSeedJobIntake();
   return NextResponse.json({
     ok: true,

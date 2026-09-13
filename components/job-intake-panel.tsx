@@ -155,18 +155,32 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
   function syncGmail() {
     startTransition(async () => {
       setMessage("");
-      const response = await fetch("/api/integrations/google/sync", { method: "POST" });
-      const body = await response.json();
-      if (!response.ok) {
-        setMessage(body.error || "Gmail sync failed. Connect Google in Settings first.");
+      const [googleRes, mhelpRes, trueRes] = await Promise.all([
+        fetch("/api/integrations/google/sync", { method: "POST" }),
+        fetch("/api/integrations/mhelpdesk", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "sync" }),
+        }),
+        fetch("/api/integrations/truesource", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "sync" }),
+        }),
+      ]);
+      const googleBody = await googleRes.json();
+      if (!googleRes.ok) {
+        setMessage(googleBody.error || "Gmail sync failed. Connect Google in Settings first.");
         return;
       }
+      await mhelpRes.json().catch(() => ({}));
+      await trueRes.json().catch(() => ({}));
       await refresh();
-      const intake = body.summary?.jobIntake;
+      const intake = googleBody.summary?.jobIntake;
       setMessage(
         intake
-          ? `Gmail sync complete. Scanned ${intake.scanned}, imported ${intake.imported}, updated ${intake.updated}.`
-          : "Gmail sync complete."
+          ? `Source sync complete. Scanned ${intake.scanned}, imported ${intake.imported}, updated ${intake.updated}.`
+          : "Source sync complete."
       );
     });
   }
@@ -218,7 +232,7 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
             type="button"
           >
             <Mail className="mr-2 inline size-4" />
-            Sync Gmail jobs
+            Sync job sources
           </button>
           <Link className="rounded-lg border border-[#2b4168] px-4 py-2 text-sm font-black text-slate-200" href="/settings">
             Integrations
