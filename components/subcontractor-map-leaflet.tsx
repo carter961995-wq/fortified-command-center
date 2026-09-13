@@ -125,7 +125,7 @@ export default function SubcontractorMapLeaflet({
             : "Tiles &copy; Esri — Esri, TomTom, Garmin, FAO, NOAA, USGS"
         }
         url={satellite ? SATELLITE_TILES : STREET_TILES}
-        subdomains={satellite ? ["mt0", "mt1", "mt2", "mt3"] : undefined}
+        {...(satellite ? { subdomains: ["mt0", "mt1", "mt2", "mt3"] as string[] } : {})}
         maxNativeZoom={satellite ? 22 : 19}
         maxZoom={22}
         keepBuffer={6}
