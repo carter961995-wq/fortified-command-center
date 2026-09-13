@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Loader2, MapPin, Plus, Radar, Search, Satellite } from "lucide-react";
 import { assignWorkOrderSubcontractor } from "../lib/actions";
 import type { SubcontractorMapPin, WorkOrderMapPin } from "../lib/subcontractor-pins";
@@ -31,15 +31,6 @@ export function SubcontractorMapPanel({
   const [satellite, setSatellite] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
-  const [mapReady, setMapReady] = useState(false);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setMapReady(true));
-    return () => {
-      window.cancelAnimationFrame(frame);
-      setMapReady(false);
-    };
-  }, []);
 
   const visibleSubs = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -145,21 +136,14 @@ export function SubcontractorMapPanel({
           </button>
         </div>
         <div className="relative h-[560px] min-h-[560px] w-full">
-          {mapReady ? (
-            <LeafletMap
-              subcontractors={visibleSubs}
-              workOrders={openJobs}
-              selectedId={selected?.id}
-              satellite={satellite}
-              onSelectSubcontractor={(pin) => setSelectedId(pin.id)}
-              onSelectWorkOrder={() => undefined}
-            />
-          ) : (
-            <div className="flex h-full min-h-[560px] items-center justify-center bg-[#d7e3ea] text-sm font-bold text-slate-600">
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Loading street map...
-            </div>
-          )}
+          <LeafletMap
+            subcontractors={visibleSubs}
+            workOrders={openJobs}
+            selectedId={selected?.id}
+            satellite={satellite}
+            onSelectSubcontractor={(pin) => setSelectedId(pin.id)}
+            onSelectWorkOrder={() => undefined}
+          />
         </div>
         {selected ? (
           <div className="border-t border-[#1f304d] bg-[#111f38] p-4">
