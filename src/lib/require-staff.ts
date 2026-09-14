@@ -1,8 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isDemoMode } from "@/lib/demo-mode";
-import { isSupabaseConfigured } from "../../../lib/env";
+import { isDemoMode, isSupabaseConfigured } from "@/lib/demo-mode";
 
 const STAFF_ROLES = ["owner", "admin"] as const;
 

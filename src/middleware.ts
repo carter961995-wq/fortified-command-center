@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { isDemoMode } from "@/lib/demo-mode";
+import { isDemoMode, isSupabaseConfigured } from "@/lib/demo-mode";
 
 const PUBLIC_PREFIXES = ["/login", "/api/health", "/api/gpt"];
 
@@ -13,8 +13,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (isDemoMode()) {
-    if (request.nextUrl.pathname === "/login") {
+  if (isDemoMode() || !isSupabaseConfigured()) {
+    if (isDemoMode() && request.nextUrl.pathname === "/login") {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       url.searchParams.delete("next");
