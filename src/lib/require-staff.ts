@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isDemoMode } from "@/lib/demo-mode";
+import { isSupabaseConfigured } from "../../../lib/env";
 
 const STAFF_ROLES = ["owner", "admin"] as const;
 
@@ -21,10 +22,10 @@ export async function requireStaff(): Promise<{
 }> {
   const supabase = await createClient();
 
-  if (isDemoMode()) {
+  if (isDemoMode() || !isSupabaseConfigured()) {
     const user = {
       id: "00000000-0000-4000-8000-000000000001",
-      email: "demo@fortified.local",
+      email: isDemoMode() ? "demo@fortified.local" : "operator@fortified.local",
     } as User;
     return {
       supabase,
@@ -32,8 +33,8 @@ export async function requireStaff(): Promise<{
       profile: {
         id: "00000000-0000-4000-8000-000000000002",
         auth_user_id: user.id,
-        full_name: "Demo Admin",
-        email: "demo@fortified.local",
+        full_name: isDemoMode() ? "Demo Admin" : "Operator",
+        email: user.email || "",
         phone: null,
         role: "owner",
       },

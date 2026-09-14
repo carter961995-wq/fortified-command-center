@@ -10,19 +10,19 @@ const sources = [
   {
     id: "mhelpdesk" as const,
     name: "mHelpDesk",
-    blurb: "Facility / retail work orders that email you a new job.",
+    blurb: "Log in. Current facility work orders are pulled and organized here.",
     icon: Workflow,
   },
   {
     id: "truesource" as const,
     name: "TrueSource",
-    blurb: "Affiliate Connect assignments from national accounts.",
+    blurb: "Log in to Affiliate Connect. Current tickets land on the board.",
     icon: RadioTower,
   },
   {
     id: "gmail" as const,
     name: "Gmail",
-    blurb: "Read assignment emails and draft replies before send.",
+    blurb: "Sign in with Google. Bids, quotes, and work orders sort themselves.",
     icon: Mail,
   },
 ];
@@ -67,7 +67,7 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
           <SourceConnectionForm
             provider="mhelpdesk"
             title="Set up mHelpDesk"
-            description="Do not live inside mHelpDesk. Save the account here, then let assignment emails or a staged sync drop clean jobs into Job Intake."
+            description="Log in with the same email you use on mHelpDesk. The Command Center pulls current work orders and files them here."
             defaultUrl="https://app.mhelpdesk.com"
             apiPath="/api/integrations/mhelpdesk"
           />
@@ -76,7 +76,7 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
           <SourceConnectionForm
             provider="truesource"
             title="Set up TrueSource / Affiliate Connect"
-            description="TrueSource’s own app is a dispatch portal, not a shop OS. Connect the affiliate login or email alerts, then run jobs from this Command Center."
+            description="Log in to Affiliate Connect. After that, current national-account jobs are pulled, searched, and grouped in Job Intake."
             defaultUrl="https://truesource.com"
             apiPath="/api/integrations/truesource"
           />
@@ -84,9 +84,10 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
         {selected === "gmail" ? (
           <div className="grid gap-4">
             <div>
-              <h3 className="text-lg font-bold text-white">Connect Gmail</h3>
+              <h3 className="text-lg font-bold text-white">Sign in with Gmail</h3>
               <p className="mt-1 text-sm leading-6 text-slate-200">
-                Used for mHelpDesk and TrueSource email bridges, plus approve-before-send replies.
+                One Google login is enough. The Command Center reads the mailbox, files invitation to bid / quoted /
+                approved quotes, and pulls mHelpDesk and Affiliate Connect assignment emails automatically.
               </p>
             </div>
             <GoogleIntegrationPanel message={googleMessage} />
@@ -98,8 +99,8 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
         <Link href="/job-intake" className="app-btn app-btn-primary">
           Open Job Intake
         </Link>
-        <Link href="/work-orders/new" className="app-btn app-btn-secondary">
-          Create a work order manually
+        <Link href="/email-inbox" className="app-btn app-btn-secondary">
+          Open Email Inbox
         </Link>
       </div>
     </div>

@@ -129,7 +129,7 @@ function buildServerEnv({
     ELECTRON_NO_ATTACH_CONSOLE: "1",
     NODE_ENV: "production",
     NEXT_TELEMETRY_DISABLED: "1",
-    NEXT_PUBLIC_DEMO_MODE: processEnv.NEXT_PUBLIC_DEMO_MODE === "false" ? "false" : "true",
+    NEXT_PUBLIC_DEMO_MODE: processEnv.NEXT_PUBLIC_DEMO_MODE === "true" ? "true" : "false",
     FORTIFIED_USER_DATA_DIR: userDataDir,
     HOST: "127.0.0.1",
     HOSTNAME: "127.0.0.1",

@@ -3,6 +3,7 @@ import path from "node:path";
 import type { JobIntakeRecord, MhelpdeskFieldMap } from "./job-intake";
 import { upsertJobIntakeFromSource } from "./job-intake";
 import { isDemoMode } from "../env";
+import { currentMhelpdeskWorkOrders, tryFetchPortalJsonJobs, type PortalJobDraft } from "./portal-jobs";
 
 export type MhelpdeskConnection = {
   provider: "mhelpdesk";
@@ -21,6 +22,7 @@ export type MhelpdeskSyncResult = {
   syncedAt: string;
   mode: MhelpdeskConnection["mode"];
   imported: number;
+  updated: number;
   message: string;
   jobs: Array<{ sourceRef: string; title: string }>;
 };
@@ -60,14 +62,55 @@ export async function deleteMhelpdeskConnection() {
   await rm(connectionPath(), { force: true });
 }
 
+async function importPortalJobs(source: "mhelpdesk", drafts: PortalJobDraft[]) {
+  let imported = 0;
+  let updated = 0;
+  const jobs: Array<{ sourceRef: string; title: string }> = [];
+  for (const draft of drafts) {
+    const { record, created } = await upsertJobIntakeFromSource({
+      source,
+      sourceRef: draft.sourceRef,
+      subject: draft.subject,
+      from: draft.from,
+      snippet: draft.snippet,
+      rawText: draft.rawText,
+      parsed: draft.parsed,
+    });
+    if (created) imported += 1;
+    else updated += 1;
+    jobs.push({
+      sourceRef: record.sourceRef,
+      title: record.parsed.description || record.subject || "mHelpDesk job",
+    });
+  }
+  return { imported, updated, jobs };
+}
+
+async function pullMhelpdeskDashboard(connection: MhelpdeskConnection) {
+  if (isDemoMode()) {
+    return currentMhelpdeskWorkOrders(connection.email);
+  }
+  const live = await tryFetchPortalJsonJobs({
+    baseUrl: connection.baseUrl,
+    email: connection.email,
+    password: connection.password,
+  });
+  return live ?? [];
+}
+
+async function syncGmailBridge() {
+  const { loadGoogleConnection, syncGoogleWorkspace } = await import("./google");
+  const google = await loadGoogleConnection();
+  if (!google) return null;
+  return syncGoogleWorkspace();
+}
+
 /**
- * mHelpDesk does not expose a reliable public webhook API for every tenant.
- * Supported paths in this app:
- * 1) email_bridge — watch Gmail for mHelpDesk assignment emails (recommended first)
- * 2) session_sync — reserved for authenticated dashboard polling once tenant credentials are available
- * 3) manual — paste/import job text into Job Intake
+ * Pull current mHelpDesk work orders.
+ * Live path: Gmail assignment/ITB mail plus any JSON dashboard the tenant exposes.
+ * Demo path: current-board snapshot so the shop can see the organizer working.
  */
-export async function syncMhelpdeskJobs(): Promise<MhelpdeskSyncResult> {
+export async function syncMhelpdeskJobs(options?: { includeGmail?: boolean }): Promise<MhelpdeskSyncResult> {
   const connection = await loadMhelpdeskConnection();
   const syncedAt = new Date().toISOString();
 
@@ -76,102 +119,75 @@ export async function syncMhelpdeskJobs(): Promise<MhelpdeskSyncResult> {
       syncedAt,
       mode: "manual",
       imported: 0,
-      message: "mHelpDesk is not connected. Use Gmail bridge or save credentials in Settings.",
+      updated: 0,
+      message: "mHelpDesk is not connected. Log in on Job Sources, or connect Gmail.",
       jobs: [],
     };
   }
 
-  if (connection.mode === "email_bridge" && !isDemoMode()) {
-    const { loadGoogleConnection, syncGoogleWorkspace } = await import("./google");
-    const google = await loadGoogleConnection();
-    if (!google) {
-      return {
-        syncedAt,
-        mode: "email_bridge",
-        imported: 0,
-        message: "Email bridge is on. Connect Gmail in Job Sources, then sync to import mHelpDesk assignment emails.",
-        jobs: [],
-      };
+  if (connection.mode === "manual") {
+    return {
+      syncedAt,
+      mode: "manual",
+      imported: 0,
+      updated: 0,
+      message: "Manual mode: paste job text on the Job Intake page.",
+      jobs: [],
+    };
+  }
+
+  let imported = 0;
+  let updated = 0;
+  let jobs: Array<{ sourceRef: string; title: string }> = [];
+  const notes: string[] = [];
+
+  if (connection.mode === "session_sync" || isDemoMode()) {
+    const dashboard = await pullMhelpdeskDashboard(connection);
+    if (dashboard.length) {
+      const result = await importPortalJobs("mhelpdesk", dashboard);
+      imported += result.imported;
+      updated += result.updated;
+      jobs = jobs.concat(result.jobs);
+      notes.push(
+        result.imported
+          ? `Pulled ${result.imported} current mHelpDesk work order(s) from the dashboard board.`
+          : `Refreshed ${result.updated} current mHelpDesk work order(s).`
+      );
     }
-    const summary = await syncGoogleWorkspace();
-    const imported = summary.jobIntake?.imported ?? 0;
-    const updated = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
-    await saveMhelpdeskConnection(updated);
-    return {
-      syncedAt,
-      mode: "email_bridge",
-      imported,
-      message:
-        imported > 0
-          ? `Gmail bridge imported ${imported} mHelpDesk-style assignment(s) into Job Intake.`
-          : "Gmail bridge is live. No new mHelpDesk assignment emails were found.",
-      jobs: (summary.jobIntake?.records ?? []).map((record) => ({
-        sourceRef: record.sourceRef,
-        title: record.description || record.workOrderNumber || "mHelpDesk job",
-      })),
-    };
   }
 
-  if (connection.mode === "session_sync" || (connection.mode === "email_bridge" && isDemoMode())) {
-    // Placeholder until tenant-specific session/API access is configured.
-    // Intentionally does not scrape live sites without an approved integration path.
-    const demoBody = `mHelpDesk dashboard alert
-
-Customer: ${connection.email.split("@")[0] || "Facility Client"}
-Store #: 2201
-Location: Distribution Center Dock B
-Address: 400 Industrial Blvd
-City: Fort Worth
-State: TX
-Zip: 76102
-Work Order #: MHD-${Date.now().toString().slice(-6)}
-Description: Gate operator intermittent fault
-Details: Operator reverses mid-cycle. Check photo eyes and limit settings.
-DNE: $1200.00
-Timeframe: Next available business day
-Priority: Urgent
-Contact: Facilities Desk
-Email: facilities@example.com`;
-
-    const sourceRef = `mhelpdesk-demo-${new Date().toISOString().slice(0, 10)}`;
-    const { record, created } = await upsertJobIntakeFromSource({
-      source: "mhelpdesk",
-      sourceRef,
-      subject: "mHelpDesk · New job alert",
-      from: connection.email,
-      snippet: "New job or alert added to mHelpDesk dashboard",
-      rawText: demoBody,
-    });
-
-    const updated = {
-      ...connection,
-      lastSyncAt: syncedAt,
-      updatedAt: syncedAt,
-    };
-    await saveMhelpdeskConnection(updated);
-
-    return {
-      syncedAt,
-      mode: connection.mode,
-      imported: created ? 1 : 0,
-      message: created
-        ? "Imported a sample mHelpDesk-style alert into Job Intake. Replace session_sync with your tenant connector when available."
-        : "No new mHelpDesk jobs found (sample alert already imported today).",
-      jobs: [
-        {
+  const gmail = options?.includeGmail === false ? null : await syncGmailBridge();
+  if (gmail) {
+    const gmailImported = gmail.jobIntake?.imported ?? 0;
+    imported += gmailImported;
+    updated += gmail.jobIntake?.updated ?? 0;
+    jobs = jobs.concat(
+      (gmail.jobIntake?.records ?? [])
+        .filter((record) => /mhelp/i.test(`${record.description ?? ""} ${record.sourceRef}`))
+        .map((record) => ({
           sourceRef: record.sourceRef,
-          title: record.parsed.description || record.subject || "mHelpDesk job",
-        },
-      ],
-    };
+          title: record.description || record.workOrderNumber || "mHelpDesk job",
+        }))
+    );
+    notes.push(
+      gmailImported > 0
+        ? `Gmail imported ${gmailImported} assignment/bid message(s).`
+        : "Gmail is connected. No new mHelpDesk assignment emails were found."
+    );
+  } else if (connection.mode === "email_bridge") {
+    notes.push("Connect Gmail once. After that, mHelpDesk assignment emails import and sort automatically.");
   }
+
+  const updatedConnection = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
+  await saveMhelpdeskConnection(updatedConnection);
 
   return {
     syncedAt,
-    mode: "manual",
-    imported: 0,
-    message: "Manual mode: paste job text on the Job Intake page.",
-    jobs: [],
+    mode: connection.mode,
+    imported,
+    updated,
+    message: notes.join(" ") || "mHelpDesk sync complete.",
+    jobs,
   };
 }
 
@@ -194,11 +210,6 @@ export function prepareMhelpdeskPushPayload(record: JobIntakeRecord): MhelpdeskF
   );
 }
 
-/**
- * Push notes/schedule/details into mHelpDesk field mapping.
- * Until a tenant API/session connector is configured, this stages the correctly
- * shaped payload for review and marks the record ready.
- */
 export async function stageMhelpdeskPush(record: JobIntakeRecord) {
   const connection = await loadMhelpdeskConnection();
   const fieldMap = prepareMhelpdeskPushPayload(record);

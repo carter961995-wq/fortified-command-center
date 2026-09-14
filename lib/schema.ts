@@ -358,13 +358,13 @@ export const featurePages = [
     slug: "email-inbox",
     label: "Email Inbox",
     title: "Email Inbox",
-    description: "Central place for inbound customer messages, work requests, photos, and approvals.",
+    description: "Gmail inbox grouped into invitation to bid, quoted, approved quotes, work orders, and invoices.",
   },
   {
     slug: "job-intake",
     label: "Job Intake",
     title: "Job Intake",
-    description: "Parse Gmail and mHelpDesk job alerts into clean briefs, then track notes, schedules, and outbound updates.",
+    description: "Automatically pull and organize mHelpDesk, Affiliate Connect, and Gmail work orders, bids, and quotes.",
   },
   {
     slug: "measurement-tool",

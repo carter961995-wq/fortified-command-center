@@ -17,7 +17,7 @@ export default async function SettingsPage({
         <dl className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-xl bg-[#0c172b] p-3"><dt className="text-xs font-black uppercase text-slate-500">Supabase URL</dt><dd className="mt-1 font-bold text-white">{process.env.NEXT_PUBLIC_SUPABASE_URL ? "Set" : "Missing"}</dd></div>
           <div className="rounded-xl bg-[#0c172b] p-3"><dt className="text-xs font-black uppercase text-slate-500">Anon key</dt><dd className="mt-1 font-bold text-white">{process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Set" : "Missing"}</dd></div>
-          <div className="rounded-xl bg-[#0c172b] p-3"><dt className="text-xs font-black uppercase text-slate-500">Configured</dt><dd className="mt-1 font-bold text-white">{isSupabaseConfigured() ? "Yes" : "No / demo mode"}</dd></div>
+          <div className="rounded-xl bg-[#0c172b] p-3"><dt className="text-xs font-black uppercase text-slate-500">Configured</dt><dd className="mt-1 font-bold text-white">{isSupabaseConfigured() ? "Yes" : "Local production"}</dd></div>
         </dl>
       </Card>
       <Card>

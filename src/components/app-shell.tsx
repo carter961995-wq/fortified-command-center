@@ -39,7 +39,7 @@ export function AppShell({
               </div>
             </SheetContent>
           </Sheet>
-          <span className="font-black text-white">Command Center</span>
+          <span className="font-black text-white">Fortified Command Center</span>
         </header>
         {demoMode ? (
           <div className="border-b border-orange-400/30 bg-orange-500/15 px-4 py-2 text-sm font-semibold text-orange-100">
