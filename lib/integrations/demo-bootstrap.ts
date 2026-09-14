@@ -5,20 +5,18 @@ import {
   loadGoogleConnection,
   loadLastSync,
   saveGoogleConnection,
-  syncGoogleWorkspace,
   type GoogleConnection,
 } from "./google";
 import {
   loadMhelpdeskConnection,
   saveMhelpdeskConnection,
-  syncMhelpdeskJobs,
 } from "./mhelpdesk";
 import {
   loadTruesourceConnection,
   saveTruesourceConnection,
-  syncTruesourceJobs,
 } from "./truesource";
 import { ensureGptApiKey } from "./gpt-bridge";
+import { syncAllJobSources } from "./source-sync";
 
 let bootstrapping: Promise<void> | null = null;
 
@@ -80,8 +78,6 @@ async function bootstrapDemoIntegrations() {
 
   const lastSync = await loadLastSync();
   if (!lastSync) {
-    await syncGoogleWorkspace();
-    await syncMhelpdeskJobs();
-    await syncTruesourceJobs();
+    await syncAllJobSources({ force: true });
   }
 }

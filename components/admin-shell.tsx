@@ -17,8 +17,8 @@ export function AdminShell({ children, profile, envWarning }: { children: React.
                     <Hammer className="size-5" />
                   </div>
                   <div>
-                    <p className="app-brand-kicker text-[10px] font-black uppercase leading-none tracking-[0.18em] text-orange-300">Fence</p>
-                    <p className="app-brand-title text-sm font-black leading-none text-white">Builders Bible</p>
+                    <p className="app-brand-kicker text-[10px] font-black uppercase leading-none tracking-[0.18em] text-orange-300">Fortified</p>
+                    <p className="app-brand-title text-sm font-black leading-none text-white">Command Center</p>
                   </div>
                 </div>
               </div>
@@ -36,7 +36,7 @@ export function AdminShell({ children, profile, envWarning }: { children: React.
       <div className="app-content">
         <header className="app-mobile-bar sticky top-0 z-20 border-b border-[#1c2b45] bg-[#060d1d]/95 px-4 py-3 backdrop-blur md:hidden">
           <div className="app-mobile-top flex items-center justify-between gap-3">
-            <Link className="font-black text-orange-400" href="/dashboard">Fence Builders Bible</Link>
+            <Link className="font-black text-orange-400" href="/dashboard">Fortified Command Center</Link>
             <form action={signOutAction}><button className="app-btn-link text-sm font-bold text-orange-400">Sign out</button></form>
           </div>
           <SidebarNav mobile />

@@ -6,9 +6,11 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardList,
+  FolderKanban,
   Mail,
   MapPin,
   RefreshCw,
+  Search,
   Send,
   StickyNote,
 } from "lucide-react";
@@ -47,6 +49,13 @@ type JobIntakeRecord = {
   snippet?: string;
   rawText: string;
   parsed: ParsedJobFields;
+  category?:
+    | "invitation_to_bid"
+    | "quoted"
+    | "approved_quote"
+    | "work_order"
+    | "invoice"
+    | "other";
   notes: string;
   scheduledDate?: string | null;
   photoUrls: string[];
@@ -82,17 +91,79 @@ function Field({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+const PIPELINE = [
+  { id: "all", label: "All" },
+  { id: "invitation_to_bid", label: "Invitation to bid" },
+  { id: "quoted", label: "Quoted" },
+  { id: "approved_quote", label: "Approved quotes" },
+  { id: "work_order", label: "Work orders" },
+] as const;
+
+function recordCategory(record: JobIntakeRecord) {
+  return record.category || "work_order";
+}
+
+function projectLabel(record: JobIntakeRecord) {
+  return (
+    [
+      record.parsed.customerName,
+      record.parsed.storeNumber ? `Store ${record.parsed.storeNumber}` : null,
+      record.parsed.locationName,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "Unassigned project"
+  );
+}
+
 export function JobIntakePanel({ initialId }: { initialId?: string }) {
   const [records, setRecords] = useState<JobIntakeRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
   const [message, setMessage] = useState("");
   const [manualText, setManualText] = useState("");
+  const [query, setQuery] = useState("");
+  const [pipeline, setPipeline] = useState<(typeof PIPELINE)[number]["id"]>("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | JobIntakeRecord["source"]>("all");
+  const [groupProjects, setGroupProjects] = useState(true);
   const [isPending, startTransition] = useTransition();
 
   const selected = useMemo(
     () => records.find((record) => record.id === selectedId) ?? records[0] ?? null,
     [records, selectedId]
   );
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return records.filter((record) => {
+      if (pipeline !== "all" && recordCategory(record) !== pipeline) return false;
+      if (sourceFilter !== "all" && record.source !== sourceFilter) return false;
+      if (!needle) return true;
+      const haystack = [
+        record.subject,
+        record.from,
+        record.snippet,
+        record.rawText,
+        record.source,
+        recordCategory(record),
+        projectLabel(record),
+        ...Object.values(record.parsed).map((value) => (value == null ? "" : String(value))),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [records, query, pipeline, sourceFilter]);
+
+  const grouped = useMemo(() => {
+    if (!groupProjects) return [{ project: "Jobs", jobs: visible }];
+    const map = new Map<string, JobIntakeRecord[]>();
+    for (const record of visible) {
+      const key = projectLabel(record);
+      const list = map.get(key) ?? [];
+      list.push(record);
+      map.set(key, list);
+    }
+    return Array.from(map.entries()).map(([project, jobs]) => ({ project, jobs }));
+  }, [visible, groupProjects]);
 
   async function refresh() {
     const response = await fetch("/api/integrations/job-intake");
@@ -106,7 +177,29 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
   }
 
   useEffect(() => {
-    refresh();
+    let cancelled = false;
+    async function boot() {
+      await fetch("/api/integrations/sync-all", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ auto: true }),
+      }).catch(() => null);
+      if (!cancelled) await refresh();
+    }
+    boot();
+    const timer = setInterval(() => {
+      fetch("/api/integrations/sync-all", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ auto: true }),
+      })
+        .then(() => (cancelled ? null : refresh()))
+        .catch(() => null);
+    }, 120000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -155,32 +248,21 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
   function syncGmail() {
     startTransition(async () => {
       setMessage("");
-      const [googleRes, mhelpRes, trueRes] = await Promise.all([
-        fetch("/api/integrations/google/sync", { method: "POST" }),
-        fetch("/api/integrations/mhelpdesk", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "sync" }),
-        }),
-        fetch("/api/integrations/truesource", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "sync" }),
-        }),
-      ]);
-      const googleBody = await googleRes.json();
-      if (!googleRes.ok) {
-        setMessage(googleBody.error || "Gmail sync failed. Connect Google in Settings first.");
+      const response = await fetch("/api/integrations/sync-all", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setMessage(body.error || "Sync failed. Connect Gmail or a portal on Job Sources first.");
         return;
       }
-      await mhelpRes.json().catch(() => ({}));
-      await trueRes.json().catch(() => ({}));
       await refresh();
-      const intake = googleBody.summary?.jobIntake;
+      const summary = body.summary;
       setMessage(
-        intake
-          ? `Source sync complete. Scanned ${intake.scanned}, imported ${intake.imported}, updated ${intake.updated}.`
-          : "Source sync complete."
+        summary?.message ||
+          `Sync complete. ${summary?.jobs?.imported ?? 0} new jobs, ${summary?.inbox?.total ?? 0} mailbox items organized.`
       );
     });
   }
@@ -211,8 +293,8 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
           <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Automation</p>
           <h1 className="mt-1 text-3xl font-black uppercase tracking-tight text-white">Job Intake</h1>
           <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-400">
-            New Gmail assignments and mHelpDesk alerts are parsed into a clean job brief, then added to your tracker
-            with notes, schedule dates, photos, approve-before-send email, and mHelpDesk field mapping.
+            Connect Gmail, mHelpDesk, or Affiliate Connect once. The Command Center pulls current work orders, searches
+            them, and groups them by project — invitation to bid, quoted, approved quotes, and assigned jobs.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -232,10 +314,10 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
             type="button"
           >
             <Mail className="mr-2 inline size-4" />
-            Sync job sources
+            Pull current jobs
           </button>
-          <Link className="rounded-lg border border-[#2b4168] px-4 py-2 text-sm font-black text-slate-200" href="/settings">
-            Integrations
+          <Link className="rounded-lg border border-[#2b4168] px-4 py-2 text-sm font-black text-slate-200" href="/job-sources">
+            Connect accounts
           </Link>
         </div>
       </header>
@@ -246,41 +328,100 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
         </div>
       ) : null}
 
+      <div className="flex flex-wrap gap-2">
+        {PIPELINE.map((item) => (
+          <button
+            key={item.id}
+            className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${
+              pipeline === item.id
+                ? "border-orange-400 bg-orange-500/20 text-orange-200"
+                : "border-[#2b4168] text-slate-300"
+            }`}
+            onClick={() => setPipeline(item.id)}
+            type="button"
+          >
+            {item.label}
+          </button>
+        ))}
+        <select
+          className="rounded-full border border-[#2b4168] bg-[#0c172b] px-3 py-1 text-xs font-black uppercase text-slate-200"
+          onChange={(event) => setSourceFilter(event.target.value as typeof sourceFilter)}
+          value={sourceFilter}
+        >
+          <option value="all">All sources</option>
+          <option value="mhelpdesk">mHelpDesk</option>
+          <option value="truesource">Affiliate Connect</option>
+          <option value="gmail">Gmail</option>
+          <option value="manual">Manual</option>
+        </select>
+        <button
+          className={`rounded-full border px-3 py-1 text-xs font-black uppercase ${
+            groupProjects ? "border-orange-400 bg-orange-500/20 text-orange-200" : "border-[#2b4168] text-slate-300"
+          }`}
+          onClick={() => setGroupProjects((value) => !value)}
+          type="button"
+        >
+          <FolderKanban className="mr-1 inline size-3" />
+          Group by project
+        </button>
+      </div>
+
+      <label className="relative block">
+        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" />
+        <input
+          className="w-full rounded-lg border border-[#223758] bg-[#0c172b] py-2 pl-10 pr-3 text-sm text-white outline-none focus:border-orange-500"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search work orders, stores, customers, projects…"
+          value={query}
+        />
+      </label>
+
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <aside className="overflow-hidden rounded-xl border border-[#1f304d] bg-[#111f38]">
           <div className="border-b border-[#1f304d] p-4">
-            <h2 className="font-black text-white">Job tracker queue</h2>
-            <p className="mt-1 text-xs text-slate-500">{records.length} jobs</p>
+            <h2 className="font-black text-white">Current work orders</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              {visible.length} of {records.length} jobs
+            </p>
           </div>
           <div className="max-h-[720px] overflow-y-auto">
-            {records.map((record) => {
-              const active = selected?.id === record.id;
-              return (
-                <button
-                  className={`block w-full border-b border-[#1f304d] p-4 text-left ${
-                    active ? "bg-orange-500/10" : "hover:bg-[#172844]"
-                  }`}
-                  key={record.id}
-                  onClick={() => setSelectedId(record.id)}
-                  type="button"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-black text-white">
-                      {record.parsed.workOrderNumber || record.parsed.storeNumber || "New job"}
-                    </p>
-                    <span className="rounded-full border border-[#2b4168] px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">
-                      {record.status}
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-400">
-                    {record.parsed.description || record.subject || record.snippet}
+            {grouped.map((group) => (
+              <div key={group.project}>
+                {groupProjects ? (
+                  <p className="sticky top-0 border-b border-[#1f304d] bg-[#15243f] px-4 py-2 text-[10px] font-black uppercase tracking-wide text-orange-300">
+                    {group.project}
                   </p>
-                  <p className="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
-                    {record.source} · {new Date(record.receivedAt).toLocaleString()}
-                  </p>
-                </button>
-              );
-            })}
+                ) : null}
+                {group.jobs.map((record) => {
+                  const active = selected?.id === record.id;
+                  return (
+                    <button
+                      className={`block w-full border-b border-[#1f304d] p-4 text-left ${
+                        active ? "bg-orange-500/10" : "hover:bg-[#172844]"
+                      }`}
+                      key={record.id}
+                      onClick={() => setSelectedId(record.id)}
+                      type="button"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-black text-white">
+                          {record.parsed.workOrderNumber || record.parsed.storeNumber || "New job"}
+                        </p>
+                        <span className="rounded-full border border-[#2b4168] px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">
+                          {recordCategory(record).replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-400">
+                        {record.parsed.description || record.subject || record.snippet}
+                      </p>
+                      <p className="mt-2 text-[11px] uppercase tracking-wide text-slate-500">
+                        {record.source} · {new Date(record.receivedAt).toLocaleString()}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </aside>
 

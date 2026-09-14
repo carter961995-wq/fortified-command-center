@@ -50,7 +50,7 @@ test("chooseListenPort reuses our own health endpoint", async () => {
   assert.deepEqual(result, { port: 43111, reused: true });
 });
 
-test("buildServerEnv forces loopback, demo mode, and a node shim path", async () => {
+test("buildServerEnv forces loopback, production mode, and a node shim path", async () => {
   await withTempDir(async (dir) => {
     const appRoot = path.join(dir, "app");
     await mkdir(path.join(appRoot, "node_modules", "next"), { recursive: true });
@@ -71,7 +71,7 @@ test("buildServerEnv forces loopback, demo mode, and a node shim path", async ()
     assert.equal(env.HOSTNAME, "127.0.0.1");
     assert.equal(env.HOST, "127.0.0.1");
     assert.equal(env.PORT, "43111");
-    assert.equal(env.NEXT_PUBLIC_DEMO_MODE, "true");
+    assert.equal(env.NEXT_PUBLIC_DEMO_MODE, "false");
     assert.equal(env.ELECTRON_RUN_AS_NODE, "1");
     assert.match(env.PATH, /bin/);
     assert.match(await readFile(shim.files[0], "utf8"), /ELECTRON_RUN_AS_NODE=1/);

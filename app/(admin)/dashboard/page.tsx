@@ -6,6 +6,8 @@ import { fetchDashboardMetrics } from "../../../lib/data";
 import { loadMhelpdeskConnection } from "../../../lib/integrations/mhelpdesk";
 import { loadTruesourceConnection } from "../../../lib/integrations/truesource";
 import { loadGoogleConnection } from "../../../lib/integrations/google";
+import { loadJobIntakeStore } from "../../../lib/integrations/job-intake";
+import { inboxCounts, loadEmailInboxStore } from "../../../lib/integrations/email-inbox";
 
 function QueueCard({
   href,
@@ -55,14 +57,16 @@ function DashboardPanel({
 
 export default async function DashboardPage() {
   const { metrics, recentWorkOrders, upcomingJobs, invoiceAttention, error } = await fetchDashboardMetrics();
-  const [mhelpdesk, truesource, gmail] = await Promise.all([
+  const [mhelpdesk, truesource, gmail, intake, inbox] = await Promise.all([
     loadMhelpdeskConnection(),
     loadTruesourceConnection(),
     loadGoogleConnection(),
+    loadJobIntakeStore(),
+    loadEmailInboxStore(),
   ]);
-  const activeJobs = Number(metrics.openWorkOrders ?? 0);
-  const quoteDesk = Number(metrics.jobsNeedingQuotes ?? 0);
-  const revenue = Math.max(0, Number(metrics.revenueThisMonth ?? 0));
+  const activeJobs = Number(metrics.openWorkOrders ?? 0) || intake.records.filter((row) => row.status !== "dismissed").length;
+  const quoteDesk = Number(metrics.jobsNeedingQuotes ?? 0) || intake.records.filter((row) => row.category === "quoted" || row.category === "invitation_to_bid").length;
+  const mailCounts = inboxCounts(inbox.messages);
 
   const sources = [
     {
@@ -93,9 +97,9 @@ export default async function DashboardPage() {
       <header className="app-hero flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <p className="app-kicker text-xs font-black uppercase tracking-[0.2em] text-orange-300">Command Center</p>
-          <h1 className="app-title mt-2 text-3xl font-black text-white md:text-4xl">Pick a source. Run the job.</h1>
+          <h1 className="app-title mt-2 text-3xl font-black text-white md:text-4xl">Fortified Command Center</h1>
           <p className="app-copy mt-2 max-w-2xl text-base font-semibold text-slate-200">
-            This is the shop OS. mHelpDesk and TrueSource are just inboxes — connect them, then work everything here.
+            Log in to Gmail, mHelpDesk, or Affiliate Connect once. Current work orders and bid mail are pulled, searched, and grouped here.
           </p>
         </div>
         <div className="app-actions flex flex-wrap gap-2">
@@ -140,9 +144,9 @@ export default async function DashboardPage() {
 
       <section className="app-grid-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <QueueCard href="/jobs" label="Active jobs" value={String(activeJobs)} detail="Open work on the board" />
-        <QueueCard href="/job-intake" label="Intake" value="Open" detail="Parsed mHelpDesk / TrueSource jobs" />
+        <QueueCard href="/job-intake" label="Intake" value={String(intake.records.length)} detail="Parsed mHelpDesk / Affiliate Connect / Gmail jobs" />
+        <QueueCard href="/email-inbox" label="Mailbox" value={String(inbox.messages.length)} detail={`${mailCounts.invitation_to_bid} bids · ${mailCounts.quoted} quoted · ${mailCounts.approved_quote} approved`} />
         <QueueCard href="/jobs" label="Quote desk" value={String(quoteDesk)} detail="Needs a number or site facts" />
-        <QueueCard href="/invoices" label="Cash" value={money(revenue)} detail={`${metrics.unpaidInvoices ?? 0} unpaid invoices`} />
       </section>
 
       <section className="app-grid-2 grid gap-6 xl:grid-cols-[0.8fr_1.7fr]">
@@ -231,8 +235,8 @@ export default async function DashboardPage() {
               </Link>
             ) : (
               <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-sources">
-                <p className="font-black text-white">1. Connect mHelpDesk or TrueSource</p>
-                <p className="mt-1 text-sm font-semibold text-slate-200">Save the login / email bridge. Do not keep working inside those apps.</p>
+                <p className="font-black text-white">1. Sign in with Gmail or log in to a portal</p>
+                <p className="mt-1 text-sm font-semibold text-slate-200">One login. The Command Center pulls current work orders and sorts the mailbox from there.</p>
               </Link>
             )}
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">

@@ -55,7 +55,7 @@ export function AppSidebar({
     >
       <div className="border-b border-slate-700 px-4 py-4">
         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-orange-300">Fortified Fence & Weld</p>
-        <p className="mt-1 text-base font-black text-white">Command Center</p>
+        <p className="mt-1 text-base font-black text-white">Fortified Command Center</p>
       </div>
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
         {nav.map((item) => {

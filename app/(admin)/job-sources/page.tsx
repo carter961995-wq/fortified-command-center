@@ -11,7 +11,7 @@ export default async function JobSourcesPage({
     <div className="mx-auto grid max-w-5xl gap-6">
       <PageHeader
         title="Job sources"
-        description="mHelpDesk and TrueSource stay as inboxes. Connect them here, then run jobs in Job Intake."
+        description="Log in once to Gmail, mHelpDesk, or Affiliate Connect. The Command Center pulls current work orders and keeps them organized from there."
       />
       <JobSourcesSetup googleMessage={sp.google} />
     </div>

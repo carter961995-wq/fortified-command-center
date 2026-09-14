@@ -13,11 +13,11 @@ Internal admin dashboard for **Fortified Fence & Weld**: commercial fence, gate,
 - **Maintenance contracts**: Create contracts, generate scheduled visits, link visits to work orders.
 - **Reports**: Rolling twelve-month revenue and P&amp;L rollups, open AR, subcontractor scorecard, job costs by sub.
 - **Settings**: Placeholders for Stripe and QuickBooks integration.
-- **Fence Builders Bible workspaces**: Planner, leads, Gmail-style inbox, clients, jobs, measurement tool,
+- **Command Center workspaces**: Planner, leads, grouped Gmail inbox, clients, jobs, measurement tool,
   subcontractor map, website extractor, documents, notepad, fence bible, reports, and dedicated invoicing.
-- **Job Intake (Gmail + mHelpDesk)**: Watches assignment emails, parses store # / WO # / DNE / location /
-  timeframe into a clean job brief, adds jobs to a tracker queue, supports notes + schedule dates, approve-
-  before-send Gmail drafts, and stages mHelpDesk field-mapped updates.
+- **Job Intake (Gmail + mHelpDesk + Affiliate Connect)**: Log in once; the app pulls current work orders,
+  searches and groups them by project, and files mailbox items into invitation to bid, quoted, approved quotes,
+  work orders, and invoices.
 - **Automation-ready integrations**: Settings exposes Google Workspace/Gmail, mHelpDesk connection modes,
   Gemini extraction, SMS, and phone-call intake surfaces. Live automation requires real OAuth/API credentials.
 
@@ -35,8 +35,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The app automatically uses demo mode when Supabase
-environment variables are missing or still set to the placeholder values from `.env.example`.
+Open [http://localhost:3000](http://localhost:3000). The app runs in **production / live local mode** unless you
+set `NEXT_PUBLIC_DEMO_MODE=true`. Sign in with Gmail or log in to mHelpDesk / Affiliate Connect to pull real
+work orders. Add Supabase keys if you want shared cloud persistence.
 
 Demo mode includes sample customers, locations, subcontractors, work orders, quotes, invoices, payments,
 maintenance contracts, and reports. Changes are stored in memory and reset when the dev server restarts.
@@ -180,12 +181,11 @@ Subcontractor Map.
 
 ## Environment variables
 
-For real persisted data, copy `.env.example` to `.env.local`, replace the placeholders with real Supabase
-values, and set `NEXT_PUBLIC_DEMO_MODE=false` if you want to force Supabase mode:
+For real persisted data, copy `.env.example` to `.env.local` and add Google / Supabase credentials:
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_DEMO_MODE` | Optional. `true` forces demo mode; `false` forces Supabase mode |
+| `NEXT_PUBLIC_DEMO_MODE` | Optional. `true` turns on seeded demo data. Default is production / live local mode |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) key — used in browser and server with user session |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key — **server only**; used for privileged storage uploads (e.g. invoice PDFs) |
@@ -226,8 +226,9 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Without Supabase keys, you are taken directly into
-the demo dashboard. With real Supabase keys, unauthenticated users are sent to `/login`.
+Open [http://localhost:3000](http://localhost:3000). Without Supabase keys you still get the live Command Center
+on this computer. Connect Gmail or a dispatch portal to pull work. With real Supabase keys, unauthenticated
+users are sent to `/login`.
 
 ## Production build
 

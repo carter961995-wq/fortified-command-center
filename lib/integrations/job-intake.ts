@@ -1,10 +1,19 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import {
+  classifyEmail,
+  detectDispatchSource,
+  projectKey,
+  type EmailCategory,
+} from "./email-classify";
+import { isDemoMode } from "../env";
 
 export type JobIntakeSource = "gmail" | "mhelpdesk" | "truesource" | "manual";
 
 export type JobIntakeStatus = "new" | "reviewed" | "tracked" | "dismissed";
+
+export type JobPipelineCategory = EmailCategory;
 
 export type ParsedJobFields = {
   customerName?: string;
@@ -64,6 +73,7 @@ export type JobIntakeRecord = {
   snippet?: string;
   rawText: string;
   parsed: ParsedJobFields;
+  category: JobPipelineCategory;
   notes: string;
   scheduledDate?: string | null;
   photoUrls: string[];
@@ -85,7 +95,7 @@ export type JobIntakeStore = {
 };
 
 const JOB_EMAIL_HINTS =
-  /\b(work\s*order|wo[#:\s-]|job\s*assigned|new\s*job|service\s*request|dispatch|store\s*#|dne|n\.?t\.?e\.?|not\s*to\s*exceed|mhelp|mhelpdesk|truesource|affiliate connect|ticket\s*#)\b/i;
+  /\b(work\s*order|wo[#:\s-]|job\s*assigned|new\s*job|service\s*request|dispatch|store\s*#|dne|n\.?t\.?e\.?|not\s*to\s*exceed|mhelp|mhelpdesk|truesource|affiliate connect|ticket\s*#|invitation to bid|\bitb\b|\brfp\b|quote approved|approved quote|quoted|bid request)\b/i;
 
 function integrationDir() {
   return (
@@ -136,6 +146,59 @@ export function looksLikeJobAssignmentEmail(input: {
 }) {
   const haystack = [input.subject, input.from, input.snippet, input.body].filter(Boolean).join("\n");
   return JOB_EMAIL_HINTS.test(haystack);
+}
+
+export function intakeCategory(record: Pick<JobIntakeRecord, "subject" | "from" | "snippet" | "rawText" | "category">): JobPipelineCategory {
+  return (
+    record.category ||
+    classifyEmail({
+      subject: record.subject,
+      from: record.from,
+      snippet: record.snippet,
+      body: record.rawText,
+    })
+  );
+}
+
+export function intakeProjectLabel(record: JobIntakeRecord) {
+  return projectKey(record.parsed);
+}
+
+export function searchJobIntakeRecords(
+  records: JobIntakeRecord[],
+  query: string,
+  filters?: { source?: JobIntakeSource | "all"; category?: JobPipelineCategory | "all" }
+) {
+  const needle = query.trim().toLowerCase();
+  return records.filter((record) => {
+    if (filters?.source && filters.source !== "all" && record.source !== filters.source) return false;
+    if (filters?.category && filters.category !== "all" && intakeCategory(record) !== filters.category) return false;
+    if (!needle) return true;
+    const haystack = [
+      record.subject,
+      record.from,
+      record.snippet,
+      record.rawText,
+      record.source,
+      intakeCategory(record),
+      intakeProjectLabel(record),
+      ...Object.values(record.parsed).map((value) => (value == null ? "" : String(value))),
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+export function groupJobIntakeByProject(records: JobIntakeRecord[]) {
+  const groups = new Map<string, JobIntakeRecord[]>();
+  for (const record of records) {
+    const key = intakeProjectLabel(record);
+    const list = groups.get(key) ?? [];
+    list.push(record);
+    groups.set(key, list);
+  }
+  return Array.from(groups.entries()).map(([project, jobs]) => ({ project, jobs }));
 }
 
 export function buildCleanJobDocument(record: JobIntakeRecord) {
@@ -339,22 +402,46 @@ export async function upsertJobIntakeFromSource(input: {
   parsed?: ParsedJobFields;
 }): Promise<{ record: JobIntakeRecord; created: boolean }> {
   const store = await loadJobIntakeStore();
-  const existing = store.records.find((record) => record.source === input.source && record.sourceRef === input.sourceRef);
+  const detectedSource =
+    input.source === "gmail"
+      ? detectDispatchSource({
+          subject: input.subject,
+          from: input.from,
+          snippet: input.snippet,
+          body: input.rawText,
+        })
+      : input.source;
+  const existing = store.records.find(
+    (record) =>
+      (record.source === detectedSource && record.sourceRef === input.sourceRef) ||
+      (record.source === input.source && record.sourceRef === input.sourceRef) ||
+      (input.parsed?.workOrderNumber &&
+        record.parsed.workOrderNumber &&
+        record.parsed.workOrderNumber === input.parsed.workOrderNumber)
+  );
   const now = new Date().toISOString();
   const parsed = input.parsed ?? (await parseJobAssignmentText({
     subject: input.subject,
     from: input.from,
     body: input.rawText,
   }));
+  const category = classifyEmail({
+    subject: input.subject,
+    from: input.from,
+    snippet: input.snippet,
+    body: input.rawText,
+  });
 
   if (existing) {
     const updated: JobIntakeRecord = {
       ...existing,
+      source: detectedSource,
       subject: input.subject ?? existing.subject,
       from: input.from ?? existing.from,
       snippet: input.snippet ?? existing.snippet,
       rawText: input.rawText || existing.rawText,
       parsed: { ...existing.parsed, ...parsed },
+      category: category === "other" ? existing.category || category : category,
       updatedAt: now,
     };
     store.records = store.records.map((record) => (record.id === existing.id ? updated : record));
@@ -365,7 +452,7 @@ export async function upsertJobIntakeFromSource(input: {
   const record: JobIntakeRecord = {
     id: randomUUID(),
     status: "new",
-    source: input.source,
+    source: detectedSource,
     sourceRef: input.sourceRef,
     receivedAt: input.receivedAt ?? now,
     subject: input.subject,
@@ -373,6 +460,7 @@ export async function upsertJobIntakeFromSource(input: {
     snippet: input.snippet,
     rawText: input.rawText,
     parsed,
+    category,
     notes: "",
     scheduledDate: parsed.dueDate ?? null,
     photoUrls: [],
@@ -388,6 +476,7 @@ export async function upsertJobIntakeFromSource(input: {
         receivedAt: input.receivedAt ?? now,
         rawText: input.rawText,
         parsed,
+        category,
         notes: "",
         photoUrls: [],
         createdAt: now,
@@ -448,6 +537,25 @@ export async function updateJobIntakeRecord(
 export async function ensureSeedJobIntake() {
   const store = await loadJobIntakeStore();
   const pushStatus = await mhelpdeskPushStatus();
+  if (!isDemoMode()) {
+    if (pushStatus === "ready" && store.records.some((record) => record.mhelpdeskPush?.status === "needs_connection")) {
+      const records = store.records.map((record) =>
+        record.mhelpdeskPush?.status === "needs_connection"
+          ? {
+              ...record,
+              mhelpdeskPush: {
+                ...record.mhelpdeskPush,
+                status: "ready" as const,
+                error: undefined,
+                updatedAt: new Date().toISOString(),
+              },
+            }
+          : record
+      );
+      return saveJobIntakeStore({ ...store, records });
+    }
+    return store;
+  }
   if (store.records.length > 0) {
     if (pushStatus === "ready" && store.records.some((record) => record.mhelpdeskPush?.status === "needs_connection")) {
       const records = store.records.map((record) =>

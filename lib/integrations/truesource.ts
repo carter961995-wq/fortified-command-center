@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { upsertJobIntakeFromSource } from "./job-intake";
 import { isDemoMode } from "../env";
+import { currentTruesourceWorkOrders, tryFetchPortalJsonJobs, type PortalJobDraft } from "./portal-jobs";
 
 export type TruesourceConnection = {
   provider: "truesource";
@@ -19,6 +20,7 @@ export type TruesourceSyncResult = {
   syncedAt: string;
   mode: TruesourceConnection["mode"];
   imported: number;
+  updated: number;
   message: string;
   jobs: Array<{ sourceRef: string; title: string }>;
 };
@@ -58,7 +60,43 @@ export async function deleteTruesourceConnection() {
   await rm(connectionPath(), { force: true });
 }
 
-export async function syncTruesourceJobs(): Promise<TruesourceSyncResult> {
+async function importPortalJobs(drafts: PortalJobDraft[]) {
+  let imported = 0;
+  let updated = 0;
+  const jobs: Array<{ sourceRef: string; title: string }> = [];
+  for (const draft of drafts) {
+    const { record, created } = await upsertJobIntakeFromSource({
+      source: "truesource",
+      sourceRef: draft.sourceRef,
+      subject: draft.subject,
+      from: draft.from,
+      snippet: draft.snippet,
+      rawText: draft.rawText,
+      parsed: draft.parsed,
+    });
+    if (created) imported += 1;
+    else updated += 1;
+    jobs.push({
+      sourceRef: record.sourceRef,
+      title: record.parsed.description || record.subject || "TrueSource job",
+    });
+  }
+  return { imported, updated, jobs };
+}
+
+async function pullTruesourceDashboard(connection: TruesourceConnection) {
+  if (isDemoMode()) {
+    return currentTruesourceWorkOrders(connection.email);
+  }
+  const live = await tryFetchPortalJsonJobs({
+    baseUrl: connection.baseUrl,
+    email: connection.email,
+    password: connection.password,
+  });
+  return live ?? [];
+}
+
+export async function syncTruesourceJobs(options?: { includeGmail?: boolean }): Promise<TruesourceSyncResult> {
   const connection = await loadTruesourceConnection();
   const syncedAt = new Date().toISOString();
 
@@ -67,99 +105,74 @@ export async function syncTruesourceJobs(): Promise<TruesourceSyncResult> {
       syncedAt,
       mode: "manual",
       imported: 0,
-      message: "TrueSource is not connected. Save the Affiliate Connect login or use email bridge.",
+      updated: 0,
+      message: "TrueSource is not connected. Log in to Affiliate Connect on Job Sources, or connect Gmail.",
       jobs: [],
     };
   }
 
-  if (connection.mode === "email_bridge" && !isDemoMode()) {
-    const { loadGoogleConnection, syncGoogleWorkspace } = await import("./google");
-    const google = await loadGoogleConnection();
-    if (!google) {
-      return {
-        syncedAt,
-        mode: "email_bridge",
-        imported: 0,
-        message: "Email bridge is on. Connect Gmail in Job Sources, then sync to import TrueSource assignment emails.",
-        jobs: [],
-      };
-    }
-    const summary = await syncGoogleWorkspace();
-    const imported = summary.jobIntake?.imported ?? 0;
-    const updated = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
-    await saveTruesourceConnection(updated);
+  if (connection.mode === "manual") {
     return {
       syncedAt,
-      mode: "email_bridge",
-      imported,
-      message:
-        imported > 0
-          ? `Gmail bridge imported ${imported} TrueSource-style assignment(s) into Job Intake.`
-          : "Gmail bridge is live. No new TrueSource assignment emails were found.",
-      jobs: (summary.jobIntake?.records ?? []).map((record) => ({
+      mode: "manual",
+      imported: 0,
+      updated: 0,
+      message: "Manual mode: paste Affiliate Connect job text on the Job Intake page.",
+      jobs: [],
+    };
+  }
+
+  let imported = 0;
+  let updated = 0;
+  let jobs: Array<{ sourceRef: string; title: string }> = [];
+  const notes: string[] = [];
+
+  if (connection.mode === "session_sync" || isDemoMode()) {
+    const dashboard = await pullTruesourceDashboard(connection);
+    if (dashboard.length) {
+      const result = await importPortalJobs(dashboard);
+      imported += result.imported;
+      updated += result.updated;
+      jobs = jobs.concat(result.jobs);
+      notes.push(
+        result.imported
+          ? `Pulled ${result.imported} current Affiliate Connect work order(s).`
+          : `Refreshed ${result.updated} current Affiliate Connect work order(s).`
+      );
+    }
+  }
+
+  const google = options?.includeGmail === false ? null : await (await import("./google")).loadGoogleConnection();
+  if (google) {
+    const { syncGoogleWorkspace } = await import("./google");
+    const summary = await syncGoogleWorkspace();
+    const gmailImported = summary.jobIntake?.imported ?? 0;
+    imported += gmailImported;
+    updated += summary.jobIntake?.updated ?? 0;
+    jobs = jobs.concat(
+      (summary.jobIntake?.records ?? []).map((record) => ({
         sourceRef: record.sourceRef,
         title: record.description || record.workOrderNumber || "TrueSource job",
-      })),
-    };
+      }))
+    );
+    notes.push(
+      gmailImported > 0
+        ? `Gmail imported ${gmailImported} assignment/bid message(s).`
+        : "Gmail is connected. No new Affiliate Connect emails were found."
+    );
+  } else if (connection.mode === "email_bridge") {
+    notes.push("Connect Gmail once. After that, Affiliate Connect emails import and sort automatically.");
   }
 
-  if (connection.mode === "session_sync" || (connection.mode === "email_bridge" && isDemoMode())) {
-    const demoBody = `TrueSource Affiliate Connect assignment
-
-Customer: ${connection.email.split("@")[0] || "National Account"}
-Store #: 1844
-Location: Home Depot lumber canopy
-Address: 2200 S Cooper St
-City: Arlington
-State: TX
-Zip: 76013
-Work Order #: TS-${Date.now().toString().slice(-6)}
-Description: Dock leveler not cycling / safety gate inspect
-Details: Affiliate Connect dispatch. Check leveler hydraulics and adjacent safety gate.
-DNE: $1800.00
-Timeframe: 24 hour response
-Priority: High
-Contact: TrueSource Dispatch
-Email: dispatch@truesource.com`;
-
-    const sourceRef = `truesource-demo-${new Date().toISOString().slice(0, 10)}`;
-    const { record, created } = await upsertJobIntakeFromSource({
-      source: "truesource",
-      sourceRef,
-      subject: "TrueSource · Affiliate Connect job",
-      from: connection.email,
-      snippet: "New TrueSource affiliate assignment",
-      rawText: demoBody,
-    });
-
-    const updated = {
-      ...connection,
-      lastSyncAt: syncedAt,
-      updatedAt: syncedAt,
-    };
-    await saveTruesourceConnection(updated);
-
-    return {
-      syncedAt,
-      mode: connection.mode,
-      imported: created ? 1 : 0,
-      message: created
-        ? "Imported a sample TrueSource / Affiliate Connect job into Job Intake."
-        : "No new TrueSource jobs found (sample assignment already imported today).",
-      jobs: [
-        {
-          sourceRef: record.sourceRef,
-          title: record.parsed.description || record.subject || "TrueSource job",
-        },
-      ],
-    };
-  }
+  const updatedConnection = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
+  await saveTruesourceConnection(updatedConnection);
 
   return {
     syncedAt,
-    mode: "manual",
-    imported: 0,
-    message: "Manual mode: paste Affiliate Connect job text on the Job Intake page.",
-    jobs: [],
+    mode: connection.mode,
+    imported,
+    updated,
+    message: notes.join(" ") || "TrueSource sync complete.",
+    jobs,
   };
 }

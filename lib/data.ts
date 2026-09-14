@@ -6,7 +6,7 @@ export type QueryResult<T> = { data: T; error?: string };
 
 export async function getSessionContext() {
   const supabase = await createSupabaseServerClient();
-  if (!supabase) return { supabase: null, user: null, profile: null, error: "Supabase environment variables are not configured." };
+  if (!supabase) return { supabase: null, user: null, profile: { full_name: "Operator", email: "" }, error: undefined };
 
   const { data: userData, error: userError } = await supabase.auth.getUser();
   const user = userData.user;

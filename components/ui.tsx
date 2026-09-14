@@ -5,7 +5,7 @@ export function PageHeader({ title, description, action }: { title: string; desc
   return (
     <div className="flex flex-col gap-4 border-b border-[#1f304d] pb-6 md:flex-row md:items-end md:justify-between">
       <div>
-        <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Fence Builders Bible</p>
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Fortified Command Center</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-white">{title}</h1>
         {description ? <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-slate-200">{description}</p> : null}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Link2, RefreshCw, Unplug } from "lucide-react";
+import { Link2, Unplug } from "lucide-react";
 
 export type SourceMode = "email_bridge" | "session_sync" | "manual";
 
@@ -31,7 +31,6 @@ export function SourceConnectionForm({
   const [baseUrl, setBaseUrl] = useState(defaultUrl);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<SourceMode>("email_bridge");
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -44,7 +43,6 @@ export function SourceConnectionForm({
     if (body.connection) {
       setBaseUrl(body.connection.baseUrl || defaultUrl);
       setEmail(body.connection.email || "");
-      setMode(body.connection.mode || "email_bridge");
       setNotes(body.connection.notes || "");
     }
   }
@@ -53,10 +51,11 @@ export function SourceConnectionForm({
     refresh();
   }, [apiPath]);
 
-  function save() {
+  function connectAndPull() {
     startTransition(async () => {
       setMessage("");
-      const response = await fetch(apiPath, {
+      const mode: SourceMode = password || connection?.hasPassword ? "session_sync" : "email_bridge";
+      const saveResponse = await fetch(apiPath, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -68,13 +67,27 @@ export function SourceConnectionForm({
           notes,
         }),
       });
-      const body = await response.json();
-      if (!response.ok) {
-        setMessage(body.error || `Failed to save ${title} connection.`);
+      const saveBody = await saveResponse.json();
+      if (!saveResponse.ok) {
+        setMessage(saveBody.error || `Failed to save ${title} login.`);
         return;
       }
       setPassword("");
-      setMessage(`${title} connection saved. Jobs will land in Job Intake.`);
+      const syncResponse = await fetch(apiPath, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "sync" }),
+      });
+      const syncBody = await syncResponse.json();
+      await fetch("/api/integrations/sync-all", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      }).catch(() => null);
+      setMessage(
+        syncBody.result?.message ||
+          `${title} connected. Current work orders are being pulled and organized.`
+      );
       await refresh();
     });
   }
@@ -87,24 +100,6 @@ export function SourceConnectionForm({
         body: JSON.stringify({ action: "disconnect" }),
       });
       setMessage(`${title} disconnected.`);
-      await refresh();
-    });
-  }
-
-  function sync() {
-    startTransition(async () => {
-      setMessage("");
-      const response = await fetch(apiPath, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "sync" }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setMessage(body.error || "Sync failed.");
-        return;
-      }
-      setMessage(body.result?.message || "Sync complete.");
       await refresh();
     });
   }
@@ -122,18 +117,14 @@ export function SourceConnectionForm({
           <h3 className="text-lg font-bold text-white">{title}</h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-200">{description}</p>
           <p className="mt-2 text-sm font-semibold text-orange-200">
-            {connected ? `Connected as ${connection?.email}` : "Not connected"}
-            {connection?.lastSyncAt ? ` · last sync ${new Date(connection.lastSyncAt).toLocaleString()}` : ""}
+            {connected ? `Logged in as ${connection?.email}` : "Not connected"}
+            {connection?.lastSyncAt ? ` · last pull ${new Date(connection.lastSyncAt).toLocaleString()}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button className="app-btn app-btn-primary" disabled={isPending} onClick={save} type="button">
+          <button className="app-btn app-btn-primary" disabled={isPending} onClick={connectAndPull} type="button">
             <Link2 className="size-4" />
-            Save {provider === "truesource" ? "TrueSource" : "mHelpDesk"}
-          </button>
-          <button className="app-btn app-btn-secondary" disabled={isPending || !connected} onClick={sync} type="button">
-            <RefreshCw className="size-4" />
-            Test sync
+            {connected ? "Reconnect and pull" : `Log in to ${provider === "truesource" ? "Affiliate Connect" : "mHelpDesk"}`}
           </button>
           {connected ? (
             <button className="app-btn app-btn-secondary" disabled={isPending} onClick={disconnect} type="button">
@@ -153,22 +144,14 @@ export function SourceConnectionForm({
           Login email
           <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" />
         </label>
-        <label className="app-field">
-          Password (optional, stored on this machine)
+        <label className="app-field md:col-span-2">
+          Password
           <input
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder={connection?.hasPassword ? "•••••••• (saved)" : "Only needed for session sync"}
+            placeholder={connection?.hasPassword ? "•••••••• (saved on this computer)" : "Same password you use on the dashboard"}
           />
-        </label>
-        <label className="app-field">
-          How jobs arrive
-          <select value={mode} onChange={(event) => setMode(event.target.value as SourceMode)}>
-            <option value="email_bridge">Email bridge — parse assignment emails in Gmail</option>
-            <option value="session_sync">Session sync — pull a sample / staged dashboard job</option>
-            <option value="manual">Manual — paste job text in Job Intake</option>
-          </select>
         </label>
       </div>
       <label className="app-field">
@@ -176,9 +159,13 @@ export function SourceConnectionForm({
         <textarea
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
-          placeholder="Which inbox, which alert emails, store list, dispatch contacts…"
+          placeholder="Which inbox, store list, dispatch contacts…"
         />
       </label>
+      <p className="text-sm font-semibold text-slate-300">
+        After you log in, the Command Center pulls current work orders and also reads matching Gmail if you have signed
+        in with Google. You do not need to keep working inside the other dashboard.
+      </p>
     </div>
   );
 }

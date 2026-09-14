@@ -19,7 +19,13 @@ export async function GET(request: NextRequest) {
   try {
     await exchangeGoogleCode({ code, origin: request.nextUrl.origin });
     cookieStore.delete("google_oauth_state");
-    return redirectWithStatus(request, "Google Workspace connected. You can sync Gmail, Drive, Calendar, and contacts now.");
+    try {
+      const { syncAllJobSources } = await import("../../../../../lib/integrations/source-sync");
+      await syncAllJobSources({ force: true });
+    } catch {
+      // Connection still succeeded; inbox pages will retry sync.
+    }
+    return redirectWithStatus(request, "Gmail connected. Inbox and work orders are being organized now.");
   } catch (callbackError) {
     return redirectWithStatus(
       request,
@@ -30,7 +36,7 @@ export async function GET(request: NextRequest) {
 
 function redirectWithStatus(request: NextRequest, message: string) {
   const url = request.nextUrl.clone();
-  url.pathname = "/settings";
+  url.pathname = "/email-inbox";
   url.searchParams.set("google", message);
   return NextResponse.redirect(url);
 }

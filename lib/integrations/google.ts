@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { looksLikeJobAssignmentEmail, upsertJobIntakeFromSource } from "./job-intake";
+import { looksLikeOperationalEmail } from "./email-classify";
+import { upsertInboxMessage } from "./email-inbox";
 import { isDemoMode } from "../env";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -79,6 +81,12 @@ export type GoogleSyncSummary = {
       description?: string;
       created: boolean;
     }>;
+  };
+  inbox?: {
+    scanned: number;
+    imported: number;
+    updated: number;
+    counts: Record<string, number>;
   };
   gemini?: {
     configured: boolean;
@@ -315,12 +323,15 @@ function extractGmailBody(payload?: GmailPart) {
   return "";
 }
 
-async function importJobAssignmentsFromGmail(
+async function ingestGmailMessages(
   accessToken: string,
   messages: GoogleSyncSummary["gmail"]["messages"]
-): Promise<NonNullable<GoogleSyncSummary["jobIntake"]>> {
-  const jobCandidates = messages.filter((message) =>
-    looksLikeJobAssignmentEmail({
+): Promise<{
+  jobIntake: NonNullable<GoogleSyncSummary["jobIntake"]>;
+  inbox: NonNullable<GoogleSyncSummary["inbox"]>;
+}> {
+  const operational = messages.filter((message) =>
+    looksLikeOperationalEmail({
       subject: message.subject,
       from: message.from,
       snippet: message.snippet,
@@ -330,19 +341,54 @@ async function importJobAssignmentsFromGmail(
   const records: NonNullable<GoogleSyncSummary["jobIntake"]>["records"] = [];
   let imported = 0;
   let updated = 0;
+  let inboxImported = 0;
+  let inboxUpdated = 0;
+  const counts: Record<string, number> = {};
 
-  for (const message of jobCandidates.slice(0, 8)) {
-    const detail = await googleApi<{
-      id: string;
-      snippet?: string;
-      internalDate?: string;
-      payload?: GmailPart & { headers?: Array<{ name: string; value: string }> };
-    }>(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=full`,
-      accessToken
-    );
+  for (const message of messages.slice(0, 40)) {
+    const needsBody =
+      looksLikeJobAssignmentEmail({
+        subject: message.subject,
+        from: message.from,
+        snippet: message.snippet,
+      }) ||
+      looksLikeOperationalEmail({
+        subject: message.subject,
+        from: message.from,
+        snippet: message.snippet,
+      });
 
-    const body = extractGmailBody(detail.payload) || detail.snippet || message.snippet;
+    let body = message.snippet;
+    let receivedAt = message.date ? new Date(message.date).toISOString() : new Date().toISOString();
+    if (needsBody) {
+      const detail = await googleApi<{
+        id: string;
+        snippet?: string;
+        internalDate?: string;
+        payload?: GmailPart & { headers?: Array<{ name: string; value: string }> };
+      }>(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=full`,
+        accessToken
+      );
+      body = extractGmailBody(detail.payload) || detail.snippet || message.snippet;
+      receivedAt = detail.internalDate
+        ? new Date(Number(detail.internalDate)).toISOString()
+        : receivedAt;
+    }
+
+    const inbox = await upsertInboxMessage({
+      id: message.id,
+      threadId: message.threadId,
+      subject: message.subject,
+      from: message.from,
+      date: receivedAt,
+      snippet: message.snippet,
+      body,
+    });
+    if (inbox.created) inboxImported += 1;
+    else inboxUpdated += 1;
+    counts[inbox.message.category] = (counts[inbox.message.category] ?? 0) + 1;
+
     if (
       !looksLikeJobAssignmentEmail({
         subject: message.subject,
@@ -354,15 +400,9 @@ async function importJobAssignmentsFromGmail(
       continue;
     }
 
-    const receivedAt = detail.internalDate
-      ? new Date(Number(detail.internalDate)).toISOString()
-      : message.date
-        ? new Date(message.date).toISOString()
-        : new Date().toISOString();
-
     const { record, created } = await upsertJobIntakeFromSource({
       source: "gmail",
-      sourceRef: detail.id,
+      sourceRef: message.id,
       receivedAt,
       subject: message.subject,
       from: message.from,
@@ -381,13 +421,26 @@ async function importJobAssignmentsFromGmail(
       description: record.parsed.description,
       created,
     });
+
+    await upsertInboxMessage({
+      id: message.id,
+      linkedIntakeId: record.id,
+    });
   }
 
   return {
-    scanned: jobCandidates.length,
-    imported,
-    updated,
-    records,
+    jobIntake: {
+      scanned: operational.length,
+      imported,
+      updated,
+      records,
+    },
+    inbox: {
+      scanned: messages.length,
+      imported: inboxImported,
+      updated: inboxUpdated,
+      counts,
+    },
   };
 }
 
@@ -460,6 +513,38 @@ async function syncDemoGoogleWorkspace(connection: GoogleConnection): Promise<Go
       date: now,
       snippet: "Repair damaged chain link at loading dock. DNE $850.",
     },
+    {
+      id: "demo-gmail-itb",
+      threadId: "demo-thread-itb",
+      subject: "Invitation to Bid · Store 219 bollard replacement",
+      from: "procurement@bayou-retail.example",
+      date: now,
+      snippet: "Please bid the entry-drive bollard sleeve replacement at Kenner Shopping Center.",
+    },
+    {
+      id: "demo-gmail-quoted",
+      threadId: "demo-thread-quoted",
+      subject: "Quote submitted · WO-45821 loading dock fence",
+      from: "quotes@fortified.local",
+      date: now,
+      snippet: "Our quote was sent for the SuperMart #1842 dock fence repair.",
+    },
+    {
+      id: "demo-gmail-approved",
+      threadId: "demo-thread-approved",
+      subject: "Quote approved · PO-99102 · Store 1842",
+      from: "ap@retail-facilities.example",
+      date: now,
+      snippet: "Your quote was approved. PO-99102 is attached. Notice to proceed.",
+    },
+    {
+      id: "demo-gmail-invoice",
+      threadId: "demo-thread-invoice",
+      subject: "Invoice INV-2041 remittance",
+      from: "ap@bayou-retail.example",
+      date: now,
+      snippet: "Payment received for invoice INV-2041. Remittance attached.",
+    },
   ];
 
   const bodies: Record<string, string> = {
@@ -513,13 +598,81 @@ Priority: High
 Contact: Dana Ruiz
 Phone: (214) 555-0198
 Email: dana.ruiz@example.com`,
+    "demo-gmail-itb": `Invitation to Bid
+Customer: Bayou Retail Group
+Store #: 219
+Location: Kenner Shopping Center
+Address: 2800 Veterans Blvd
+City: Kenner
+State: LA
+Zip: 70062
+Work Order #: ITB-21908
+Description: Replace cracked bollard sleeves at main entry
+Details: Please bid labor, sleeves, and recore. Photos attached.
+Timeframe: Bid due in 3 business days
+Priority: Medium
+Contact: Drew Patel
+Email: kenner@bayou-retail.example`,
+    "demo-gmail-quoted": `Quote submitted
+Customer: Retail Facilities Group
+Store #: 1842
+Location: SuperMart #1842
+Work Order #: WO-45821
+Description: Repair damaged chain link at loading dock
+Details: Quote sent to customer. Waiting on approval.
+Quoted: Yes
+DNE: $850.00
+Email: dana.ruiz@example.com`,
+    "demo-gmail-approved": `Quote approved
+Customer: Retail Facilities Group
+Store #: 1842
+Location: SuperMart #1842
+Work Order #: WO-45821
+PO #: PO-99102
+Description: Repair damaged chain link at loading dock
+Details: Your quote was approved. Notice to proceed. Schedule this week.
+Priority: High
+Email: ap@retail-facilities.example`,
+    "demo-gmail-invoice": `Invoice remittance
+Customer: Bayou Retail Group
+Invoice #: INV-2041
+Work Order #: MHD-10418
+Details: Payment received. Remittance attached.`,
   };
 
   const records: NonNullable<GoogleSyncSummary["jobIntake"]>["records"] = [];
   let imported = 0;
   let updated = 0;
+  let inboxImported = 0;
+  let inboxUpdated = 0;
+  const counts: Record<string, number> = {};
 
   for (const message of messages) {
+    const rawText = bodies[message.id] ?? message.snippet;
+    const inbox = await upsertInboxMessage({
+      id: message.id,
+      threadId: message.threadId,
+      subject: message.subject,
+      from: message.from,
+      date: now,
+      snippet: message.snippet,
+      body: rawText,
+    });
+    if (inbox.created) inboxImported += 1;
+    else inboxUpdated += 1;
+    counts[inbox.message.category] = (counts[inbox.message.category] ?? 0) + 1;
+
+    if (
+      !looksLikeJobAssignmentEmail({
+        subject: message.subject,
+        from: message.from,
+        snippet: message.snippet,
+        body: rawText,
+      })
+    ) {
+      continue;
+    }
+
     const { record, created } = await upsertJobIntakeFromSource({
       source: "gmail",
       sourceRef: message.id,
@@ -527,7 +680,7 @@ Email: dana.ruiz@example.com`,
       subject: message.subject,
       from: message.from,
       snippet: message.snippet,
-      rawText: bodies[message.id] ?? message.snippet,
+      rawText,
     });
     if (created) imported += 1;
     else updated += 1;
@@ -539,6 +692,7 @@ Email: dana.ruiz@example.com`,
       description: record.parsed.description,
       created,
     });
+    await upsertInboxMessage({ id: message.id, linkedIntakeId: record.id });
   }
 
   const summary: GoogleSyncSummary = {
@@ -571,6 +725,12 @@ Email: dana.ruiz@example.com`,
       updated,
       records,
     },
+    inbox: {
+      scanned: messages.length,
+      imported: inboxImported,
+      updated: inboxUpdated,
+      counts,
+    },
     gemini: { configured: Boolean(process.env.GEMINI_API_KEY) },
   };
 
@@ -588,15 +748,15 @@ export async function syncGoogleWorkspace() {
   }
   const { accessToken } = await getValidGoogleAccessToken();
   const jobQuery = encodeURIComponent(
-    "newer_than:30d (subject:(work order OR assigned OR job OR dispatch OR ticket) OR (work order OR store # OR DNE OR NTE OR mhelpdesk))"
+    'newer_than:90d (subject:(work order OR assigned OR job OR dispatch OR ticket OR "invitation to bid" OR ITB OR RFP OR quoted OR "quote approved" OR "approved quote" OR bid OR invoice) OR (work order OR store # OR DNE OR NTE OR mhelpdesk OR truesource OR "affiliate connect" OR "invitation to bid"))'
   );
   const gmailList = await googleApi<{ messages?: Array<{ id: string; threadId: string }> }>(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${jobQuery}`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=40&q=${jobQuery}`,
     accessToken
   );
 
   const recentList = await googleApi<{ messages?: Array<{ id: string; threadId: string }> }>(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=newer_than:30d",
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=newer_than:90d",
     accessToken
   );
 
@@ -607,7 +767,7 @@ export async function syncGoogleWorkspace() {
 
   const messages = await Promise.all(
     Array.from(mergedIds.values())
-      .slice(0, 20)
+      .slice(0, 40)
       .map(async (message) => {
         const detail = await googleApi<{
           id: string;
@@ -645,7 +805,7 @@ export async function syncGoogleWorkspace() {
     accessToken
   );
 
-  const jobIntake = await importJobAssignmentsFromGmail(accessToken, messages);
+  const ingested = await ingestGmailMessages(accessToken, messages);
 
   const summary: GoogleSyncSummary = {
     syncedAt: new Date().toISOString(),
@@ -659,7 +819,8 @@ export async function syncGoogleWorkspace() {
         end: event.end?.dateTime ?? event.end?.date,
       })),
     },
-    jobIntake,
+    jobIntake: ingested.jobIntake,
+    inbox: ingested.inbox,
     gemini: await runGeminiExtraction(messages, drive.files ?? []),
   };
 

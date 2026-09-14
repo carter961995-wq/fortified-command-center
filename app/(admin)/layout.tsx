@@ -21,7 +21,11 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   }
 
   if (!isSupabaseConfigured()) {
-    return <AdminShell envWarning="Supabase is not configured. Add environment variables and run the migration before using live data.">{children}</AdminShell>;
+    return (
+      <AdminShell envWarning="Live local mode. Sign in with Gmail or log in to mHelpDesk / Affiliate Connect — the Command Center pulls and organizes the work from there.">
+        {children}
+      </AdminShell>
+    );
   }
   const { user, profile } = await getSessionContext();
   if (!user) redirect("/login");
