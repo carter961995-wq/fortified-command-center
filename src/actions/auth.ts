@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isDemoMode } from "@/lib/demo-mode";
+import { isDemoMode, isLiveLocalMode } from "@/lib/demo-mode";
 
 export async function signOut(): Promise<void> {
-  if (isDemoMode()) {
-    redirect("/dashboard");
+  if (isDemoMode() || isLiveLocalMode()) {
+    redirect("/login");
   }
 
   const supabase = await createClient();

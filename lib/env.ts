@@ -26,3 +26,7 @@ export function isSupabaseConfigured() {
 export function isDemoMode() {
   return process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 }
+
+export function isLiveLocalMode() {
+  return !isDemoMode() && !isSupabaseConfigured();
+}

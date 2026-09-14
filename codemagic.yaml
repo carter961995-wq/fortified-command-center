@@ -84,7 +84,7 @@ workflows:
         - mac_desktop_signing
       vars:
         NEXT_TELEMETRY_DISABLED: "1"
-        NEXT_PUBLIC_DEMO_MODE: "true"
+        NEXT_PUBLIC_DEMO_MODE: "false"
         # Add these values to the mac_desktop_signing secure environment group
         # before producing public Mac downloads. Signed + notarized builds open
         # normally on macOS. Without them this workflow still builds unsigned
@@ -173,7 +173,7 @@ workflows:
       node: 22
       vars:
         NEXT_TELEMETRY_DISABLED: "1"
-        NEXT_PUBLIC_DEMO_MODE: "true"
+        NEXT_PUBLIC_DEMO_MODE: "false"
         # Optional Authenticode signing (same electron-builder names as Mac):
         # CSC_LINK / CSC_KEY_PASSWORD in a windows_desktop_signing group.
         # Without them this workflow still produces an unsigned .exe/.zip.

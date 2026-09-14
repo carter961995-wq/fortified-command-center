@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { isDemoMode } from "@/lib/demo-mode";
+import { isDemoMode, isLiveLocalMode } from "@/lib/demo-mode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ export default function LoginPage() {
   const next = searchParams.get("next");
   const err = searchParams.get("error");
   const demoMode = isDemoMode();
+  const liveLocal = isLiveLocalMode();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,7 +25,7 @@ export default function LoginPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-    if (demoMode) {
+    if (demoMode || liveLocal) {
       router.push(dest === "/" ? "/dashboard" : dest);
       router.refresh();
       return;
@@ -49,7 +50,11 @@ export default function LoginPage() {
         <CardHeader>
           <CardTitle className="text-xl">Fortified Work Order Command Center</CardTitle>
           <CardDescription>
-            {demoMode ? "Local demo mode is enabled. No Supabase account is required." : "Internal sign-in for owner and admin roles."}
+            {demoMode
+              ? "Local demo mode is enabled. No Supabase account is required."
+              : liveLocal
+                ? "Production mode on this computer. Open the Command Center, then sign in with Gmail or log in to mHelpDesk / Affiliate Connect."
+                : "Internal sign-in for owner and admin roles."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -57,6 +62,10 @@ export default function LoginPage() {
             {demoMode ? (
               <p className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
                 Demo data is loaded in memory and resets when the dev server restarts.
+              </p>
+            ) : liveLocal ? (
+              <p className="rounded-md border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                Live production on this computer. Records stay in the local store. Connect Gmail or a dispatch portal to pull real work.
               </p>
             ) : (
               <>
@@ -86,7 +95,7 @@ export default function LoginPage() {
             )}
             {message ? <p className="text-sm text-destructive">{message}</p> : null}
             <Button type="submit" className="w-full" disabled={loading}>
-              {demoMode ? "Open demo dashboard" : loading ? "Signing in..." : "Sign in"}
+              {demoMode ? "Open demo dashboard" : liveLocal ? "Open Command Center" : loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
         </CardContent>

@@ -1,4 +1,10 @@
-import { loadDemoOverlaySync, saveDemoOverlaySync } from "./demo-persist";
+import {
+  loadDemoOverlaySync,
+  loadLocalSnapshotSync,
+  saveDemoOverlaySync,
+  saveLocalSnapshotSync,
+} from "./demo-persist.ts";
+import { isDemoMode } from "./demo-mode.ts";
 
 type DemoRow = Record<string, any>;
 type DemoTable = keyof typeof demoDb;
@@ -612,24 +618,76 @@ const demoDb = {
   work_order_financials: [],
 };
 
-const demoUser = {
-  id: ids.user,
-  email: "demo@fortified.local",
-  app_metadata: {},
-  user_metadata: { full_name: "Demo Admin" },
-  aud: "authenticated",
-  created_at: "2026-01-01T00:00:00.000Z",
+const seedDb = structuredClone(demoDb);
+type StoreMode = "demo" | "local";
+let storeMode: StoreMode | null = null;
+
+const operatorProfile = {
+  id: ids.profile,
+  auth_user_id: ids.user,
+  full_name: "Operator",
+  email: "operator@fortified.local",
+  phone: null,
+  role: "owner",
 };
 
-export function createDemoClient() {
-  applyDemoOverlay();
+function cloneRows<T>(rows: T): T {
+  return JSON.parse(JSON.stringify(rows)) as T;
+}
+
+function replaceTable(table: DemoTable, rows: DemoRow[]) {
+  const current = physicalRows(table);
+  current.splice(0, current.length, ...rows.map((row) => ({ ...row })));
+}
+
+function resetStore(mode: StoreMode) {
+  storeMode = mode;
+  for (const table of Object.keys(seedDb) as DemoTable[]) {
+    if (table === "work_order_financials") continue;
+    if (mode === "demo") {
+      replaceTable(table, cloneRows(seedDb[table] as DemoRow[]));
+      continue;
+    }
+    if (table === "users_profile") {
+      replaceTable(table, [{ ...operatorProfile }]);
+      continue;
+    }
+    replaceTable(table, []);
+  }
+  if (mode === "demo") applyDemoOverlay();
+  else applyLocalSnapshot();
+}
+
+function ensureStore(seed: boolean) {
+  const wanted: StoreMode = seed ? "demo" : "local";
+  if (storeMode !== wanted) resetStore(wanted);
+  else if (wanted === "demo") applyDemoOverlay();
+}
+
+function activeUser() {
+  const profile = demoDb.users_profile[0];
+  const email = profile?.email || (storeMode === "local" ? "operator@fortified.local" : "demo@fortified.local");
+  const fullName = profile?.full_name || (storeMode === "local" ? "Operator" : "Demo Admin");
+  return {
+    id: profile?.auth_user_id || ids.user,
+    email,
+    app_metadata: {},
+    user_metadata: { full_name: fullName },
+    aud: "authenticated",
+    created_at: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+export function createLocalDataClient(options?: { seed?: boolean }) {
+  ensureStore(options?.seed ?? isDemoMode());
+  const user = activeUser();
   return {
     auth: {
       async getUser() {
-        return { data: { user: demoUser }, error: null };
+        return { data: { user }, error: null };
       },
       async signInWithPassword() {
-        return { data: { user: demoUser, session: null }, error: null };
+        return { data: { user, session: null }, error: null };
       },
       async signOut() {
         return { error: null };
@@ -653,6 +711,15 @@ export function createDemoClient() {
   };
 }
 
+export function createDemoClient() {
+  return createLocalDataClient({ seed: true });
+}
+
+export function resetLocalDataStoreForTests(options?: { seed?: boolean }) {
+  storeMode = null;
+  createLocalDataClient({ seed: options?.seed ?? false });
+}
+
 class DemoQuery implements PromiseLike<any> {
   private action: "select" | "insert" | "update" | "delete" = "select";
   private filters: Filter[] = [];
@@ -662,8 +729,11 @@ class DemoQuery implements PromiseLike<any> {
   private selectOptions: { count?: "exact"; head?: boolean } = {};
   private mutationValue: any;
   private orExpression: string | null = null;
+  private table: DemoTable;
 
-  constructor(private table: DemoTable) {}
+  constructor(table: DemoTable) {
+    this.table = table;
+  }
 
   select(_columns = "*", options: { count?: "exact"; head?: boolean } = {}) {
     this.selectOptions = options;
@@ -765,7 +835,7 @@ class DemoQuery implements PromiseLike<any> {
   }
 
   private async execute() {
-    applyDemoOverlay();
+    if (storeMode === "demo") applyDemoOverlay();
     if (this.action === "insert") return this.executeInsert();
     if (this.action === "update") return this.executeUpdate();
     if (this.action === "delete") return this.executeDelete();
@@ -866,7 +936,36 @@ function applyDemoOverlay() {
   }
 }
 
+function applyLocalSnapshot() {
+  const snapshot = loadLocalSnapshotSync();
+  if (!snapshot) return;
+  for (const [table, incoming] of Object.entries(snapshot)) {
+    if (!Array.isArray(incoming) || table === "work_order_financials") continue;
+    replaceTable(table as DemoTable, incoming as DemoRow[]);
+  }
+}
+
 function persistDemoTables() {
+  if (storeMode === "local") {
+    saveLocalSnapshotSync({
+      users_profile: physicalRows("users_profile").map((row) => ({ ...row })),
+      customers: physicalRows("customers").map((row) => ({ ...row })),
+      locations: physicalRows("locations").map((row) => ({ ...row })),
+      subcontractors: physicalRows("subcontractors").map((row) => ({ ...row })),
+      work_orders: physicalRows("work_orders").map((row) => ({ ...row })),
+      quotes: physicalRows("quotes").map((row) => ({ ...row })),
+      quote_line_items: physicalRows("quote_line_items").map((row) => ({ ...row })),
+      invoices: physicalRows("invoices").map((row) => ({ ...row })),
+      invoice_line_items: physicalRows("invoice_line_items").map((row) => ({ ...row })),
+      payments: physicalRows("payments").map((row) => ({ ...row })),
+      job_costs: physicalRows("job_costs").map((row) => ({ ...row })),
+      maintenance_contracts: physicalRows("maintenance_contracts").map((row) => ({ ...row })),
+      maintenance_visits: physicalRows("maintenance_visits").map((row) => ({ ...row })),
+      work_order_photos: physicalRows("work_order_photos").map((row) => ({ ...row })),
+      work_order_documents: physicalRows("work_order_documents").map((row) => ({ ...row })),
+    });
+    return;
+  }
   saveDemoOverlaySync({
     customers: physicalRows("customers").map((row) => ({ ...row })),
     locations: physicalRows("locations").map((row) => ({ ...row })),

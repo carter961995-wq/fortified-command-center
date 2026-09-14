@@ -14,3 +14,7 @@ export function isSupabaseConfigured() {
       !anonKey.includes("your-supabase")
   );
 }
+
+export function isLiveLocalMode() {
+  return !isDemoMode() && !isSupabaseConfigured();
+}

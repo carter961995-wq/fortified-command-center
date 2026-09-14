@@ -1,12 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createDemoClient } from "@/lib/demo-client";
-import { isDemoMode } from "@/lib/demo-mode";
+import { createLocalDataClient } from "@/lib/demo-client";
+import { isDemoMode, isSupabaseConfigured } from "@/lib/demo-mode";
 
 /** Server-only: PDF uploads and privileged operations. Never import in client components. */
 export function createAdminClient(): SupabaseClient {
-  if (isDemoMode()) {
-    return createDemoClient() as unknown as SupabaseClient;
+  if (isDemoMode() || !isSupabaseConfigured()) {
+    return createLocalDataClient({ seed: isDemoMode() }) as unknown as SupabaseClient;
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
