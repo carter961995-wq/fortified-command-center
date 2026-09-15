@@ -6,6 +6,7 @@ import {
   syncTruesourceJobs,
   type TruesourceConnection,
 } from "../../../../../lib/integrations/truesource";
+import { normalizeTruesourceBaseUrl } from "../../../../../lib/integrations/portal-jobs";
 
 export async function GET() {
   const connection = await loadTruesourceConnection();
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const connection: TruesourceConnection = {
       provider: "truesource",
-      baseUrl: (body.baseUrl || existing?.baseUrl || "https://truesource.com").replace(/\/$/, ""),
+      baseUrl: normalizeTruesourceBaseUrl(body.baseUrl || existing?.baseUrl || "https://affiliateconnect.truesource.com"),
       email: body.email || existing?.email || "",
       password: body.password || existing?.password,
       mode: body.mode || existing?.mode || "email_bridge",

@@ -17,7 +17,7 @@ type Connection = {
 export function MhelpdeskIntegrationPanel() {
   const [connected, setConnected] = useState(false);
   const [connection, setConnection] = useState<Connection | null>(null);
-  const [baseUrl, setBaseUrl] = useState("https://app.mhelpdesk.com");
+  const [baseUrl, setBaseUrl] = useState("https://secure1.mhelpdesk.com");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<Connection["mode"]>("email_bridge");
@@ -31,7 +31,7 @@ export function MhelpdeskIntegrationPanel() {
     setConnected(Boolean(body.connected));
     setConnection(body.connection);
     if (body.connection) {
-      setBaseUrl(body.connection.baseUrl || "https://app.mhelpdesk.com");
+      setBaseUrl(body.connection.baseUrl || "https://secure1.mhelpdesk.com");
       setEmail(body.connection.email || "");
       setMode(body.connection.mode || "email_bridge");
       setNotes(body.connection.notes || "");

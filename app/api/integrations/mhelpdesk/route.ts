@@ -8,6 +8,7 @@ import {
 } from "../../../../lib/integrations/mhelpdesk";
 import { isDemoMode } from "../../../../lib/env";
 import { ensureDemoIntegrations } from "../../../../lib/integrations/demo-bootstrap";
+import { normalizeMhelpdeskBaseUrl } from "../../../../lib/integrations/portal-jobs";
 
 export async function GET() {
   if (isDemoMode()) await ensureDemoIntegrations();
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const connection: MhelpdeskConnection = {
       provider: "mhelpdesk",
-      baseUrl: (body.baseUrl || existing?.baseUrl || "https://app.mhelpdesk.com").replace(/\/$/, ""),
+      baseUrl: normalizeMhelpdeskBaseUrl(body.baseUrl || existing?.baseUrl || "https://secure1.mhelpdesk.com"),
       email: body.email || existing?.email || "",
       password: body.password || existing?.password,
       mode: body.mode || existing?.mode || "email_bridge",

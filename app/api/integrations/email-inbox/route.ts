@@ -8,9 +8,11 @@ import {
   searchInboxMessages,
 } from "../../../../lib/integrations/email-inbox";
 import { upsertJobIntakeFromSource } from "../../../../lib/integrations/job-intake";
+import { dropPlaceholderLocalData } from "../../../../lib/integrations/source-sync";
 
 export async function GET(request: Request) {
   if (isDemoMode()) await ensureDemoIntegrations();
+  else await dropPlaceholderLocalData();
   const url = new URL(request.url);
   const query = url.searchParams.get("q") ?? "";
   const categoryParam = url.searchParams.get("category") ?? "all";

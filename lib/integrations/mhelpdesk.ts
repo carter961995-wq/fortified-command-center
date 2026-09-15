@@ -3,7 +3,7 @@ import path from "node:path";
 import type { JobIntakeRecord, MhelpdeskFieldMap } from "./job-intake";
 import { upsertJobIntakeFromSource } from "./job-intake";
 import { isDemoMode } from "../env";
-import { currentMhelpdeskWorkOrders, tryFetchPortalJsonJobs, type PortalJobDraft } from "./portal-jobs";
+import { currentMhelpdeskWorkOrders, pullMhelpdeskLiveJobs, type PortalJobDraft } from "./portal-jobs";
 
 export type MhelpdeskConnection = {
   provider: "mhelpdesk";
@@ -88,14 +88,13 @@ async function importPortalJobs(source: "mhelpdesk", drafts: PortalJobDraft[]) {
 
 async function pullMhelpdeskDashboard(connection: MhelpdeskConnection) {
   if (isDemoMode()) {
-    return currentMhelpdeskWorkOrders(connection.email);
+    return { jobs: currentMhelpdeskWorkOrders(connection.email), warning: undefined as string | undefined };
   }
-  const live = await tryFetchPortalJsonJobs({
+  return pullMhelpdeskLiveJobs({
     baseUrl: connection.baseUrl,
     email: connection.email,
     password: connection.password,
   });
-  return live ?? [];
 }
 
 async function syncGmailBridge() {
@@ -120,7 +119,7 @@ export async function syncMhelpdeskJobs(options?: { includeGmail?: boolean }): P
       mode: "manual",
       imported: 0,
       updated: 0,
-      message: "mHelpDesk is not connected. Log in on Job Sources, or connect Gmail.",
+      message: "mHelpDesk is not connected. Log in on Job Sources with your real dashboard email, or connect Gmail.",
       jobs: [],
     };
   }
@@ -143,39 +142,52 @@ export async function syncMhelpdeskJobs(options?: { includeGmail?: boolean }): P
 
   if (connection.mode === "session_sync" || isDemoMode()) {
     const dashboard = await pullMhelpdeskDashboard(connection);
-    if (dashboard.length) {
-      const result = await importPortalJobs("mhelpdesk", dashboard);
+    if (dashboard.jobs.length) {
+      const result = await importPortalJobs("mhelpdesk", dashboard.jobs);
       imported += result.imported;
       updated += result.updated;
       jobs = jobs.concat(result.jobs);
       notes.push(
-        result.imported
-          ? `Pulled ${result.imported} current mHelpDesk work order(s) from the dashboard board.`
-          : `Refreshed ${result.updated} current mHelpDesk work order(s).`
+        isDemoMode()
+          ? `Loaded ${result.imported + result.updated} sample mHelpDesk jobs because demo mode is on.`
+          : result.imported
+            ? `Pulled ${result.imported} live mHelpDesk work order(s) from the dashboard.`
+            : `Refreshed ${result.updated} live mHelpDesk work order(s).`
       );
+    }
+    if (dashboard.warning) notes.push(dashboard.warning);
+  }
+
+  if (options?.includeGmail !== false) {
+    try {
+      const gmail = await syncGmailBridge();
+      if (gmail) {
+        const gmailImported = gmail.jobIntake?.imported ?? 0;
+        imported += gmailImported;
+        updated += gmail.jobIntake?.updated ?? 0;
+        jobs = jobs.concat(
+          (gmail.jobIntake?.records ?? [])
+            .filter((record) => /mhelp/i.test(`${record.description ?? ""} ${record.sourceRef}`))
+            .map((record) => ({
+              sourceRef: record.sourceRef,
+              title: record.description || record.workOrderNumber || "mHelpDesk job",
+            }))
+        );
+        notes.push(
+          gmailImported > 0
+            ? `Gmail imported ${gmailImported} assignment/bid message(s).`
+            : "Gmail is connected. No new mHelpDesk assignment emails were found."
+        );
+      } else if (connection.mode === "email_bridge") {
+        notes.push("Connect Gmail so mHelpDesk assignment, bid, and quote emails import automatically.");
+      }
+    } catch (error) {
+      notes.push(error instanceof Error ? error.message : "Gmail sync failed.");
     }
   }
 
-  const gmail = options?.includeGmail === false ? null : await syncGmailBridge();
-  if (gmail) {
-    const gmailImported = gmail.jobIntake?.imported ?? 0;
-    imported += gmailImported;
-    updated += gmail.jobIntake?.updated ?? 0;
-    jobs = jobs.concat(
-      (gmail.jobIntake?.records ?? [])
-        .filter((record) => /mhelp/i.test(`${record.description ?? ""} ${record.sourceRef}`))
-        .map((record) => ({
-          sourceRef: record.sourceRef,
-          title: record.description || record.workOrderNumber || "mHelpDesk job",
-        }))
-    );
-    notes.push(
-      gmailImported > 0
-        ? `Gmail imported ${gmailImported} assignment/bid message(s).`
-        : "Gmail is connected. No new mHelpDesk assignment emails were found."
-    );
-  } else if (connection.mode === "email_bridge") {
-    notes.push("Connect Gmail once. After that, mHelpDesk assignment emails import and sort automatically.");
+  if (!notes.length) {
+    notes.push("mHelpDesk is connected, but no live work orders were imported. Check the dashboard password or connect Gmail.");
   }
 
   const updatedConnection = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
@@ -186,7 +198,7 @@ export async function syncMhelpdeskJobs(options?: { includeGmail?: boolean }): P
     mode: connection.mode,
     imported,
     updated,
-    message: notes.join(" ") || "mHelpDesk sync complete.",
+    message: notes.join(" "),
     jobs,
   };
 }

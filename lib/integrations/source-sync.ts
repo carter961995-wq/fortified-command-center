@@ -1,10 +1,18 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { loadGoogleConnection, syncGoogleWorkspace, type GoogleSyncSummary } from "./google";
-import { loadMhelpdeskConnection, syncMhelpdeskJobs, type MhelpdeskSyncResult } from "./mhelpdesk";
-import { loadTruesourceConnection, syncTruesourceJobs, type TruesourceSyncResult } from "./truesource";
-import { inboxCounts, loadEmailInboxStore } from "./email-inbox";
-import { loadJobIntakeStore } from "./job-intake";
+import {
+  deleteGoogleConnection,
+  isDemoGoogleConnection,
+  loadGoogleConnection,
+  syncGoogleWorkspace,
+  type GoogleSyncSummary,
+} from "./google";
+import { loadMhelpdeskConnection, deleteMhelpdeskConnection, syncMhelpdeskJobs, type MhelpdeskSyncResult } from "./mhelpdesk";
+import { loadTruesourceConnection, deleteTruesourceConnection, syncTruesourceJobs, type TruesourceSyncResult } from "./truesource";
+import { inboxCounts, loadEmailInboxStore, saveEmailInboxStore } from "./email-inbox";
+import { loadJobIntakeStore, saveJobIntakeStore } from "./job-intake";
+import { isPlaceholderInboxMessage, isPlaceholderIntakeRecord } from "./placeholder-data";
+import { isDemoMode } from "../env";
 
 const STALE_MS = 5 * 60 * 1000;
 
@@ -60,9 +68,43 @@ async function snapshotCounts(imported: number, extraMessage?: string): Promise<
   };
 }
 
+export async function dropPlaceholderLocalData() {
+  if (isDemoMode()) return false;
+  let changed = false;
+  const google = await loadGoogleConnection();
+  if (isDemoGoogleConnection(google)) {
+    await deleteGoogleConnection();
+    changed = true;
+  }
+  const mhelpdesk = await loadMhelpdeskConnection();
+  if (mhelpdesk?.email?.endsWith("@fortified.local")) {
+    await deleteMhelpdeskConnection();
+    changed = true;
+  }
+  const truesource = await loadTruesourceConnection();
+  if (truesource?.email?.endsWith("@fortified.local")) {
+    await deleteTruesourceConnection();
+    changed = true;
+  }
+  const intake = await loadJobIntakeStore();
+  const liveIntake = intake.records.filter((record) => !isPlaceholderIntakeRecord(record));
+  if (liveIntake.length !== intake.records.length) {
+    await saveJobIntakeStore({ ...intake, records: liveIntake });
+    changed = true;
+  }
+  const inbox = await loadEmailInboxStore();
+  const liveInbox = inbox.messages.filter((message) => !isPlaceholderInboxMessage(message));
+  if (liveInbox.length !== inbox.messages.length) {
+    await saveEmailInboxStore({ ...inbox, messages: liveInbox });
+    changed = true;
+  }
+  return changed;
+}
+
 export async function syncAllJobSources(options?: { force?: boolean }): Promise<SourceSyncSummary> {
+  const purged = await dropPlaceholderLocalData();
   const last = await loadLastSourceSync();
-  if (!options?.force && last?.syncedAt && Date.now() - Date.parse(last.syncedAt) < STALE_MS) {
+  if (!purged && !options?.force && last?.syncedAt && Date.now() - Date.parse(last.syncedAt) < STALE_MS) {
     return { ...last, skipped: true };
   }
 
@@ -111,7 +153,10 @@ export async function syncAllJobSources(options?: { force?: boolean }): Promise<
   }
 
   if (!google && !mhelpdesk && !truesource) {
-    const empty = await snapshotCounts(0, "Sign in with Gmail or log in to mHelpDesk / Affiliate Connect. After that, sync runs by itself.");
+    const empty = await snapshotCounts(
+      0,
+      "Sign in with your real Gmail account or log in to mHelpDesk / Affiliate Connect. Sample jobs are not used in live mode."
+    );
     await saveLastSourceSync(empty);
     return empty;
   }

@@ -238,7 +238,13 @@ export async function getValidGoogleAccessToken() {
   const connection = await loadGoogleConnection();
   if (!connection) throw new Error("Google is not connected.");
 
-  if (isDemoMode() || isDemoGoogleConnection(connection)) {
+  if (isDemoGoogleConnection(connection)) {
+    if (!isDemoMode()) {
+      await deleteGoogleConnection();
+      throw new Error(
+        "The connected Gmail mailbox was a sample inbox, not your real mail. Sign in with Google on Job Sources to pull live work orders, bids, and quotes."
+      );
+    }
     return { accessToken: connection.accessToken, connection };
   }
 
@@ -345,7 +351,7 @@ async function ingestGmailMessages(
   let inboxUpdated = 0;
   const counts: Record<string, number> = {};
 
-  for (const message of messages.slice(0, 40)) {
+  for (const message of messages.slice(0, 80)) {
     const needsBody =
       looksLikeJobAssignmentEmail({
         subject: message.subject,
@@ -356,7 +362,8 @@ async function ingestGmailMessages(
         subject: message.subject,
         from: message.from,
         snippet: message.snippet,
-      });
+      }) ||
+      /mhelpdesk|truesource|affiliate.?connect/i.test(`${message.subject} ${message.from} ${message.snippet}`);
 
     let body = message.snippet;
     let receivedAt = message.date ? new Date(message.date).toISOString() : new Date().toISOString();
@@ -443,6 +450,15 @@ async function ingestGmailMessages(
     },
   };
 }
+
+const GMAIL_JOB_QUERIES = [
+  'newer_than:120d (mhelpdesk OR mhelpdesk.com OR "m help desk")',
+  'newer_than:120d (truesource OR "true source" OR "affiliate connect" OR affiliateconnect)',
+  'newer_than:120d ("work order" OR workorder OR "WO#" OR "WO #" OR "ticket assigned" OR dispatch)',
+  'newer_than:120d ("invitation to bid" OR ITB OR RFP OR RFQ OR "request for quote" OR "request for proposal" OR "bid request" OR "please bid")',
+  'newer_than:120d ("quote approved" OR "approved quote" OR "notice to proceed" OR "quote submitted" OR quoted)',
+  'newer_than:60d (invoice OR remittance OR "payment received")',
+];
 
 export async function sendApprovedGmailDraft(input: {
   to: string;
@@ -743,31 +759,32 @@ Details: Payment received. Remittance attached.`,
 export async function syncGoogleWorkspace() {
   const connection = await loadGoogleConnection();
   if (!connection) throw new Error("Google is not connected.");
-  if (isDemoMode() || isDemoGoogleConnection(connection)) {
+  if (isDemoGoogleConnection(connection) && !isDemoMode()) {
+    await deleteGoogleConnection();
+    throw new Error(
+      "The connected Gmail mailbox was a sample inbox, not your real mail. Sign in with Google on Job Sources to pull live work orders, bids, and quotes."
+    );
+  }
+  if (isDemoMode() && isDemoGoogleConnection(connection)) {
     return syncDemoGoogleWorkspace(connection);
   }
   const { accessToken } = await getValidGoogleAccessToken();
-  const jobQuery = encodeURIComponent(
-    'newer_than:90d (subject:(work order OR assigned OR job OR dispatch OR ticket OR "invitation to bid" OR ITB OR RFP OR quoted OR "quote approved" OR "approved quote" OR bid OR invoice) OR (work order OR store # OR DNE OR NTE OR mhelpdesk OR truesource OR "affiliate connect" OR "invitation to bid"))'
-  );
-  const gmailList = await googleApi<{ messages?: Array<{ id: string; threadId: string }> }>(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=40&q=${jobQuery}`,
-    accessToken
-  );
-
-  const recentList = await googleApi<{ messages?: Array<{ id: string; threadId: string }> }>(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=newer_than:90d",
-    accessToken
-  );
-
   const mergedIds = new Map<string, { id: string; threadId: string }>();
-  for (const message of [...(gmailList.messages ?? []), ...(recentList.messages ?? [])]) {
-    mergedIds.set(message.id, message);
+  for (const query of GMAIL_JOB_QUERIES) {
+    try {
+      const listed = await googleApi<{ messages?: Array<{ id: string; threadId: string }> }>(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${encodeURIComponent(query)}`,
+        accessToken
+      );
+      for (const message of listed.messages ?? []) mergedIds.set(message.id, message);
+    } catch {
+      continue;
+    }
   }
 
   const messages = await Promise.all(
     Array.from(mergedIds.values())
-      .slice(0, 40)
+      .slice(0, 80)
       .map(async (message) => {
         const detail = await googleApi<{
           id: string;

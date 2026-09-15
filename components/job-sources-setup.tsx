@@ -67,8 +67,8 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
           <SourceConnectionForm
             provider="mhelpdesk"
             title="Set up mHelpDesk"
-            description="Log in with the same email you use on mHelpDesk. The Command Center pulls current work orders and files them here."
-            defaultUrl="https://app.mhelpdesk.com"
+            description="Log in with the same email and password you use on mHelpDesk. The Command Center tries the live jobs board, then imports matching Gmail assignment and RFQ emails. Sample jobs are only used when demo mode is on."
+            defaultUrl="https://secure1.mhelpdesk.com"
             apiPath="/api/integrations/mhelpdesk"
           />
         ) : null}
@@ -76,8 +76,8 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
           <SourceConnectionForm
             provider="truesource"
             title="Set up TrueSource / Affiliate Connect"
-            description="Log in to Affiliate Connect. After that, current national-account jobs are pulled, searched, and grouped in Job Intake."
-            defaultUrl="https://truesource.com"
+            description="Log in to Affiliate Connect. After that, current national-account jobs and quote requests are pulled from the live board and from Gmail. Sample tickets are not used in live mode."
+            defaultUrl="https://affiliateconnect.truesource.com"
             apiPath="/api/integrations/truesource"
           />
         ) : null}
@@ -86,8 +86,7 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
             <div>
               <h3 className="text-lg font-bold text-white">Sign in with Gmail</h3>
               <p className="mt-1 text-sm leading-6 text-slate-200">
-                One Google login is enough. The Command Center reads the mailbox, files invitation to bid / quoted /
-                approved quotes, and pulls mHelpDesk and Affiliate Connect assignment emails automatically.
+                One Google login is enough. The Command Center reads the mailbox for mHelpDesk, Affiliate Connect, invitation-to-bid, RFQ, approved quotes, work orders, and invoices. A sample mailbox is not used unless demo mode is on.
               </p>
             </div>
             <GoogleIntegrationPanel message={googleMessage} />

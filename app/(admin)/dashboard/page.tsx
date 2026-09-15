@@ -236,7 +236,7 @@ export default async function DashboardPage() {
             ) : (
               <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-sources">
                 <p className="font-black text-white">1. Sign in with Gmail or log in to a portal</p>
-                <p className="mt-1 text-sm font-semibold text-slate-200">One login. The Command Center pulls current work orders and sorts the mailbox from there.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-200">One login. Live mHelpDesk, Affiliate Connect, and Gmail work orders import here — not sample jobs.</p>
               </Link>
             )}
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">

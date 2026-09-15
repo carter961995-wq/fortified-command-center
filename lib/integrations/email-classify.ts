@@ -62,7 +62,7 @@ export function classifyEmail(input: {
   }
 
   if (
-    /\b(invitation to bid|\bitb\b|\brfp\b|request for (?:proposal|quote|bid)|please bid|bid request|bid opportunity|invited to bid|solicitation)\b/i.test(
+    /\b(invitation to bid|\bitb\b|\brfp\b|\brfq\b|request for (?:proposal|quote|bid)|please bid|bid request|bid opportunity|invited to bid|solicitation)\b/i.test(
       haystack
     )
   ) {
