@@ -232,6 +232,10 @@ users are sent to `/login`.
 
 ## Production build
 
+Desktop Mac/Windows CI builds ship **production / live local mode** (`NEXT_PUBLIC_DEMO_MODE=false`).
+The packaged app does not load seeded demo jobs. Connect Gmail or a dispatch portal, or add Supabase
+keys, for live shop data.
+
 ```bash
 npm run build
 npm start

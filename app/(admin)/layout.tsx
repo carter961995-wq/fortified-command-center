@@ -21,8 +21,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   }
 
   if (!isSupabaseConfigured()) {
+    const { profile } = await getSessionContext();
     return (
-      <AdminShell envWarning="Live local mode. Sign in with Gmail or log in to mHelpDesk / Affiliate Connect — the Command Center pulls and organizes the work from there.">
+      <AdminShell
+        profile={profile}
+        envWarning="Production mode on this computer. Sign in with Gmail or log in to mHelpDesk / Affiliate Connect — the Command Center pulls and organizes the work from there."
+      >
         {children}
       </AdminShell>
     );

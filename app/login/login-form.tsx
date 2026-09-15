@@ -44,7 +44,8 @@ export function LoginForm({ configured, demoMode = false }: { configured: boolea
       {localLive ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-950">
           Production mode on this computer. Open the Command Center, then sign in with Gmail or log in to mHelpDesk /
-          Affiliate Connect. The app pulls and organizes the work from there.
+          Affiliate Connect. The app pulls and organizes the work from there. Records are stored locally until you add
+          Supabase keys.
         </div>
       ) : null}
       {!configured && !localLive && !demoMode ? (

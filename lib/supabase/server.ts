@@ -1,12 +1,15 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { createDemoClient } from "../../src/lib/demo-client";
+import { createLocalDataClient } from "../../src/lib/demo-client";
 import { getSupabaseEnv, isDemoMode, isSupabaseConfigured } from "../env";
 
+function localDataClient() {
+  return createLocalDataClient({ seed: isDemoMode() }) as unknown as SupabaseClient;
+}
+
 export async function createSupabaseServerClient(): Promise<SupabaseClient | null> {
-  if (isDemoMode()) return createDemoClient() as unknown as SupabaseClient;
-  if (!isSupabaseConfigured()) return null;
+  if (isDemoMode() || !isSupabaseConfigured()) return localDataClient();
   const { url, anonKey } = getSupabaseEnv();
   const cookieStore = await cookies();
 
@@ -27,7 +30,7 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient | nul
 }
 
 export function createSupabaseServiceClient(): SupabaseClient | null {
-  if (isDemoMode()) return createDemoClient() as unknown as SupabaseClient;
+  if (isDemoMode() || !isSupabaseConfigured()) return localDataClient();
   const { url, serviceRoleKey } = getSupabaseEnv();
   if (!url || !serviceRoleKey) return null;
   return createClient(url, serviceRoleKey, {

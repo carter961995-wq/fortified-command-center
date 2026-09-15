@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-latest
     env:
       NEXT_TELEMETRY_DISABLED: "1"
-      NEXT_PUBLIC_DEMO_MODE: "true"
+      NEXT_PUBLIC_DEMO_MODE: "false"
       REQUIRE_MAC_SIGNING: "true"
       CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}
       CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
