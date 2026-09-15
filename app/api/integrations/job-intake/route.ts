@@ -6,9 +6,11 @@ import {
 } from "../../../../lib/integrations/job-intake";
 import { isDemoMode } from "../../../../lib/env";
 import { ensureDemoIntegrations } from "../../../../lib/integrations/demo-bootstrap";
+import { dropPlaceholderLocalData } from "../../../../lib/integrations/source-sync";
 
 export async function GET() {
   if (isDemoMode()) await ensureDemoIntegrations();
+  else await dropPlaceholderLocalData();
   const store = await ensureSeedJobIntake();
   return NextResponse.json({
     ok: true,

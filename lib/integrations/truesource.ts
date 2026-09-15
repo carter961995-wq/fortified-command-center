@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { upsertJobIntakeFromSource } from "./job-intake";
 import { isDemoMode } from "../env";
-import { currentTruesourceWorkOrders, tryFetchPortalJsonJobs, type PortalJobDraft } from "./portal-jobs";
+import { currentTruesourceWorkOrders, pullTruesourceLiveJobs, type PortalJobDraft } from "./portal-jobs";
 
 export type TruesourceConnection = {
   provider: "truesource";
@@ -86,14 +86,12 @@ async function importPortalJobs(drafts: PortalJobDraft[]) {
 
 async function pullTruesourceDashboard(connection: TruesourceConnection) {
   if (isDemoMode()) {
-    return currentTruesourceWorkOrders(connection.email);
+    return { jobs: currentTruesourceWorkOrders(connection.email), warning: undefined as string | undefined };
   }
-  const live = await tryFetchPortalJsonJobs({
-    baseUrl: connection.baseUrl,
+  return pullTruesourceLiveJobs({
     email: connection.email,
     password: connection.password,
   });
-  return live ?? [];
 }
 
 export async function syncTruesourceJobs(options?: { includeGmail?: boolean }): Promise<TruesourceSyncResult> {
@@ -129,39 +127,52 @@ export async function syncTruesourceJobs(options?: { includeGmail?: boolean }): 
 
   if (connection.mode === "session_sync" || isDemoMode()) {
     const dashboard = await pullTruesourceDashboard(connection);
-    if (dashboard.length) {
-      const result = await importPortalJobs(dashboard);
+    if (dashboard.jobs.length) {
+      const result = await importPortalJobs(dashboard.jobs);
       imported += result.imported;
       updated += result.updated;
       jobs = jobs.concat(result.jobs);
       notes.push(
-        result.imported
-          ? `Pulled ${result.imported} current Affiliate Connect work order(s).`
-          : `Refreshed ${result.updated} current Affiliate Connect work order(s).`
+        isDemoMode()
+          ? `Loaded ${result.imported + result.updated} sample Affiliate Connect jobs because demo mode is on.`
+          : result.imported
+            ? `Pulled ${result.imported} live Affiliate Connect work order(s).`
+            : `Refreshed ${result.updated} live Affiliate Connect work order(s).`
       );
+    }
+    if (dashboard.warning) notes.push(dashboard.warning);
+  }
+
+  if (options?.includeGmail !== false) {
+    try {
+      const google = await (await import("./google")).loadGoogleConnection();
+      if (google) {
+        const { syncGoogleWorkspace } = await import("./google");
+        const summary = await syncGoogleWorkspace();
+        const gmailImported = summary.jobIntake?.imported ?? 0;
+        imported += gmailImported;
+        updated += summary.jobIntake?.updated ?? 0;
+        jobs = jobs.concat(
+          (summary.jobIntake?.records ?? []).map((record) => ({
+            sourceRef: record.sourceRef,
+            title: record.description || record.workOrderNumber || "TrueSource job",
+          }))
+        );
+        notes.push(
+          gmailImported > 0
+            ? `Gmail imported ${gmailImported} assignment/bid message(s).`
+            : "Gmail is connected. No new Affiliate Connect emails were found."
+        );
+      } else if (connection.mode === "email_bridge") {
+        notes.push("Connect Gmail so Affiliate Connect assignment, bid, and quote emails import automatically.");
+      }
+    } catch (error) {
+      notes.push(error instanceof Error ? error.message : "Gmail sync failed.");
     }
   }
 
-  const google = options?.includeGmail === false ? null : await (await import("./google")).loadGoogleConnection();
-  if (google) {
-    const { syncGoogleWorkspace } = await import("./google");
-    const summary = await syncGoogleWorkspace();
-    const gmailImported = summary.jobIntake?.imported ?? 0;
-    imported += gmailImported;
-    updated += summary.jobIntake?.updated ?? 0;
-    jobs = jobs.concat(
-      (summary.jobIntake?.records ?? []).map((record) => ({
-        sourceRef: record.sourceRef,
-        title: record.description || record.workOrderNumber || "TrueSource job",
-      }))
-    );
-    notes.push(
-      gmailImported > 0
-        ? `Gmail imported ${gmailImported} assignment/bid message(s).`
-        : "Gmail is connected. No new Affiliate Connect emails were found."
-    );
-  } else if (connection.mode === "email_bridge") {
-    notes.push("Connect Gmail once. After that, Affiliate Connect emails import and sort automatically.");
+  if (!notes.length) {
+    notes.push("TrueSource is connected, but no live work orders were imported. Check the Affiliate Connect password or connect Gmail.");
   }
 
   const updatedConnection = { ...connection, lastSyncAt: syncedAt, updatedAt: syncedAt };
@@ -172,7 +183,7 @@ export async function syncTruesourceJobs(options?: { includeGmail?: boolean }): 
     mode: connection.mode,
     imported,
     updated,
-    message: notes.join(" ") || "TrueSource sync complete.",
+    message: notes.join(" "),
     jobs,
   };
 }

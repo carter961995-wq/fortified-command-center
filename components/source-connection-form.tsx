@@ -163,8 +163,8 @@ export function SourceConnectionForm({
         />
       </label>
       <p className="text-sm font-semibold text-slate-300">
-        After you log in, the Command Center pulls current work orders and also reads matching Gmail if you have signed
-        in with Google. You do not need to keep working inside the other dashboard.
+        After you log in, the Command Center tries the live dashboard and also reads matching Gmail if you have signed
+        in with Google. It will not fill Job Intake with sample work orders unless demo mode is on.
       </p>
     </div>
   );

@@ -87,9 +87,8 @@ export function GoogleIntegrationPanel({ message }: { message?: string }) {
 
       {status.demoMailbox ? (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm leading-6 text-emerald-100">
-          Demo Gmail is live as <span className="font-mono">{status.email}</span>. Sync pulls mHelpDesk and TrueSource
-          assignment emails into Job Intake. Add real <span className="font-mono">GOOGLE_CLIENT_ID</span> / secret later
-          for live Workspace OAuth.
+          Demo Gmail is a sample mailbox only. It does not read your real mail. Sign in with Google using your shop
+          account to pull live mHelpDesk, TrueSource, RFQ, and work-order emails.
         </div>
       ) : null}
 

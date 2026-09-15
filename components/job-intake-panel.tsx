@@ -293,8 +293,8 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
           <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Automation</p>
           <h1 className="mt-1 text-3xl font-black uppercase tracking-tight text-white">Job Intake</h1>
           <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-400">
-            Connect Gmail, mHelpDesk, or Affiliate Connect once. The Command Center pulls current work orders, searches
-            them, and groups them by project — invitation to bid, quoted, approved quotes, and assigned jobs.
+            Connect Gmail, mHelpDesk, or Affiliate Connect once. The Command Center searches those sources for active
+            work orders and requests for quote. Sample Canal Street / Bayou Retail jobs only appear when demo mode is on.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

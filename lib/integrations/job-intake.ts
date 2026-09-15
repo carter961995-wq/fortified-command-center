@@ -8,6 +8,7 @@ import {
   type EmailCategory,
 } from "./email-classify";
 import { isDemoMode } from "../env";
+import { isPlaceholderIntakeRecord } from "./placeholder-data";
 
 export type JobIntakeSource = "gmail" | "mhelpdesk" | "truesource" | "manual";
 
@@ -95,7 +96,7 @@ export type JobIntakeStore = {
 };
 
 const JOB_EMAIL_HINTS =
-  /\b(work\s*order|wo[#:\s-]|job\s*assigned|new\s*job|service\s*request|dispatch|store\s*#|dne|n\.?t\.?e\.?|not\s*to\s*exceed|mhelp|mhelpdesk|truesource|affiliate connect|ticket\s*#|invitation to bid|\bitb\b|\brfp\b|quote approved|approved quote|quoted|bid request)\b/i;
+  /\b(work\s*order|wo[#:\s-]|job\s*assigned|new\s*job|service\s*request|dispatch|store\s*#|dne|n\.?t\.?e\.?|not\s*to\s*exceed|mhelp|mhelpdesk|truesource|affiliate connect|ticket\s*#|invitation to bid|\bitb\b|\brfp\b|\brfq\b|request for (?:quote|proposal|bid)|quote approved|approved quote|quoted|bid request|please bid)\b/i;
 
 function integrationDir() {
   return (
@@ -538,6 +539,10 @@ export async function ensureSeedJobIntake() {
   const store = await loadJobIntakeStore();
   const pushStatus = await mhelpdeskPushStatus();
   if (!isDemoMode()) {
+    const liveRecords = store.records.filter((record) => !isPlaceholderIntakeRecord(record));
+    if (liveRecords.length !== store.records.length) {
+      return saveJobIntakeStore({ ...store, records: liveRecords });
+    }
     if (pushStatus === "ready" && store.records.some((record) => record.mhelpdeskPush?.status === "needs_connection")) {
       const records = store.records.map((record) =>
         record.mhelpdeskPush?.status === "needs_connection"
