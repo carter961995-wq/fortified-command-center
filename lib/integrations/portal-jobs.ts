@@ -398,9 +398,10 @@ function parseHtmlTables(html: string, input: { source: "mhelpdesk" | "truesourc
   const jobs: PortalJobDraft[] = [];
   const tables = html.match(/<table[\s\S]*?<\/table>/gi) ?? [];
   for (const table of tables) {
-    const rows = table.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
-    if (rows.length < 2) continue;
-    const headers = (rows[0].match(/<t[hd][\s\S]*?<\/t[hd]>/gi) ?? []).map((cell) => decodeEntities(cell).toLowerCase());
+    const rows: string[] = table.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
+    const headerRow = rows[0];
+    if (!headerRow || rows.length < 2) continue;
+    const headers = (headerRow.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) ?? []).map((cell) => decodeEntities(cell).toLowerCase());
     if (!headers.some((header) => /work\s*order|job|ticket|wo\s*#|store|customer/.test(header))) continue;
     for (const row of rows.slice(1)) {
       const cells = (row.match(/<t[hd][\s\S]*?<\/t[hd]>/gi) ?? []).map((cell) => decodeEntities(cell));
