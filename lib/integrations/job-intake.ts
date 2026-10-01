@@ -6,9 +6,10 @@ import {
   detectDispatchSource,
   projectKey,
   type EmailCategory,
-} from "./email-classify";
-import { isDemoMode } from "../env";
-import { isPlaceholderIntakeRecord } from "./placeholder-data";
+} from "./email-classify.ts";
+import { isDemoMode } from "../env.ts";
+import { collectFilesFromText, mergeIntakeFiles, type IntakeFile } from "./intake-files.ts";
+import { isPlaceholderIntakeRecord } from "./placeholder-data.ts";
 
 export type JobIntakeSource = "gmail" | "mhelpdesk" | "truesource" | "manual";
 
@@ -50,6 +51,22 @@ export type JobEmailDraft = {
   sentAt?: string;
 };
 
+export type JobDispatch = {
+  status: "assigned" | "sent" | "needs_contractor";
+  contractorId?: string;
+  contractorName?: string;
+  contractorEmail?: string;
+  contractorPhone?: string;
+  reason?: string;
+  routeId?: string;
+  fortifiedWorkOrderNumber?: string;
+  workOrderId?: string;
+  documentPath?: string;
+  sentAt?: string;
+  error?: string;
+  updatedAt: string;
+};
+
 export type MhelpdeskFieldMap = {
   workOrderNumber?: string;
   storeNumber?: string;
@@ -78,6 +95,8 @@ export type JobIntakeRecord = {
   notes: string;
   scheduledDate?: string | null;
   photoUrls: string[];
+  files?: IntakeFile[];
+  dispatch?: JobDispatch | null;
   workOrderId?: string | null;
   emailDraft?: JobEmailDraft | null;
   mhelpdeskPush?: {
@@ -115,7 +134,7 @@ async function ensureDir() {
 }
 
 async function mhelpdeskPushStatus(): Promise<"ready" | "needs_connection"> {
-  const { loadMhelpdeskConnection } = await import("./mhelpdesk");
+  const { loadMhelpdeskConnection } = await import("./mhelpdesk.ts");
   return (await loadMhelpdeskConnection()) ? "ready" : "needs_connection";
 }
 
@@ -401,6 +420,7 @@ export async function upsertJobIntakeFromSource(input: {
   snippet?: string;
   rawText: string;
   parsed?: ParsedJobFields;
+  files?: IntakeFile[];
 }): Promise<{ record: JobIntakeRecord; created: boolean }> {
   const store = await loadJobIntakeStore();
   const detectedSource =
@@ -433,6 +453,8 @@ export async function upsertJobIntakeFromSource(input: {
     body: input.rawText,
   });
 
+  const files = mergeIntakeFiles(existing?.files, [...(input.files ?? []), ...collectFilesFromText(input.rawText)]);
+
   if (existing) {
     const updated: JobIntakeRecord = {
       ...existing,
@@ -443,6 +465,8 @@ export async function upsertJobIntakeFromSource(input: {
       rawText: input.rawText || existing.rawText,
       parsed: { ...existing.parsed, ...parsed },
       category: category === "other" ? existing.category || category : category,
+      files,
+      photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name).filter(Boolean),
       updatedAt: now,
     };
     store.records = store.records.map((record) => (record.id === existing.id ? updated : record));
@@ -464,7 +488,8 @@ export async function upsertJobIntakeFromSource(input: {
     category,
     notes: "",
     scheduledDate: parsed.dueDate ?? null,
-    photoUrls: [],
+    photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name).filter(Boolean),
+    files,
     workOrderId: null,
     emailDraft: null,
     mhelpdeskPush: {
@@ -508,7 +533,10 @@ export async function getJobIntakeRecord(id: string) {
 export async function updateJobIntakeRecord(
   id: string,
   patch: Partial<
-    Pick<JobIntakeRecord, "status" | "notes" | "scheduledDate" | "photoUrls" | "parsed" | "emailDraft" | "mhelpdeskPush" | "workOrderId">
+    Pick<
+      JobIntakeRecord,
+      "status" | "notes" | "scheduledDate" | "photoUrls" | "files" | "dispatch" | "parsed" | "emailDraft" | "mhelpdeskPush" | "workOrderId"
+    >
   >
 ) {
   const store = await loadJobIntakeStore();

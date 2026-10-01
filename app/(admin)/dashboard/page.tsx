@@ -6,6 +6,7 @@ import { fetchDashboardMetrics } from "../../../lib/data";
 import { loadMhelpdeskConnection } from "../../../lib/integrations/mhelpdesk";
 import { loadTruesourceConnection } from "../../../lib/integrations/truesource";
 import { loadGoogleConnection } from "../../../lib/integrations/google";
+import { loadDispatchMonitorState } from "../../../lib/integrations/dispatch-monitor";
 import { loadJobIntakeStore } from "../../../lib/integrations/job-intake";
 import { inboxCounts, loadEmailInboxStore } from "../../../lib/integrations/email-inbox";
 
@@ -57,13 +58,16 @@ function DashboardPanel({
 
 export default async function DashboardPage() {
   const { metrics, recentWorkOrders, upcomingJobs, invoiceAttention, error } = await fetchDashboardMetrics();
-  const [mhelpdesk, truesource, gmail, intake, inbox] = await Promise.all([
+  const [mhelpdesk, truesource, gmail, intake, inbox, dispatchMonitor] = await Promise.all([
     loadMhelpdeskConnection(),
     loadTruesourceConnection(),
     loadGoogleConnection(),
     loadJobIntakeStore(),
     loadEmailInboxStore(),
+    loadDispatchMonitorState(),
   ]);
+  const dispatched = intake.records.filter((row) => row.dispatch?.status === "sent" || row.dispatch?.status === "assigned").length;
+  const waitingOnCrew = intake.records.filter((row) => row.dispatch?.status === "needs_contractor").length;
   const activeJobs = Number(metrics.openWorkOrders ?? 0) || intake.records.filter((row) => row.status !== "dismissed").length;
   const quoteDesk = Number(metrics.jobsNeedingQuotes ?? 0) || intake.records.filter((row) => row.category === "quoted" || row.category === "invitation_to_bid").length;
   const mailCounts = inboxCounts(inbox.messages);
@@ -99,7 +103,7 @@ export default async function DashboardPage() {
           <p className="app-kicker text-xs font-black uppercase tracking-[0.2em] text-orange-300">Command Center</p>
           <h1 className="app-title mt-2 text-3xl font-black text-white md:text-4xl">Fortified Command Center</h1>
           <p className="app-copy mt-2 max-w-2xl text-base font-semibold text-slate-200">
-            Log in to Gmail, mHelpDesk, or Affiliate Connect once. Current work orders and bid mail are pulled, searched, and grouped here.
+            mHelpDesk, Affiliate Connect, and Gmail stay under watch. A new work order is turned into a Fortified work order and sent to the contractor for that job location.
           </p>
         </div>
         <div className="app-actions flex flex-wrap gap-2">
@@ -144,7 +148,7 @@ export default async function DashboardPage() {
 
       <section className="app-grid-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <QueueCard href="/jobs" label="Active jobs" value={String(activeJobs)} detail="Open work on the board" />
-        <QueueCard href="/job-intake" label="Intake" value={String(intake.records.length)} detail="Parsed mHelpDesk / Affiliate Connect / Gmail jobs" />
+        <QueueCard href="/job-sources" label="Dispatch" value={String(dispatched)} detail={dispatchMonitor.enabled ? `${waitingOnCrew} waiting on a location match` : "Watching is paused"} />
         <QueueCard href="/email-inbox" label="Mailbox" value={String(inbox.messages.length)} detail={`${mailCounts.invitation_to_bid} bids · ${mailCounts.quoted} quoted · ${mailCounts.approved_quote} approved`} />
         <QueueCard href="/jobs" label="Quote desk" value={String(quoteDesk)} detail="Needs a number or site facts" />
       </section>
@@ -228,9 +232,9 @@ export default async function DashboardPage() {
           <div className="grid gap-3">
             {sources.every((source) => source.connected) ? (
               <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">
-                <p className="font-black text-white">1. Sources are live — open Job Intake</p>
+                <p className="font-black text-white">1. Sources are live — dispatch is watching</p>
                 <p className="mt-1 text-sm font-semibold text-slate-200">
-                  mHelpDesk, TrueSource, and Gmail are connected. Sync or pick a parsed job and accept it onto the board.
+                  New mHelpDesk, Affiliate Connect, and Gmail work orders are branded and assigned to the contractor for that location.
                 </p>
               </Link>
             ) : (
@@ -240,8 +244,8 @@ export default async function DashboardPage() {
               </Link>
             )}
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">
-              <p className="font-black text-white">2. Open Job Intake and select a job</p>
-              <p className="mt-1 text-sm font-semibold text-slate-200">Add notes, set a date, then accept it onto the board.</p>
+              <p className="font-black text-white">2. Open Job Intake to review the branded work order</p>
+              <p className="mt-1 text-sm font-semibold text-slate-200">Confirm the contractor, photos, and Fortified work order. Add a location route if a job is waiting on a crew.</p>
             </Link>
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/jobs">
               <p className="font-black text-white">3. Run it from Jobs</p>

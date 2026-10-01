@@ -1,9 +1,10 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { looksLikeJobAssignmentEmail, upsertJobIntakeFromSource } from "./job-intake";
-import { looksLikeOperationalEmail } from "./email-classify";
-import { upsertInboxMessage } from "./email-inbox";
-import { isDemoMode } from "../env";
+import { looksLikeJobAssignmentEmail, upsertJobIntakeFromSource } from "./job-intake.ts";
+import { collectGmailFiles, type IntakeFile } from "./intake-files.ts";
+import { looksLikeOperationalEmail } from "./email-classify.ts";
+import { upsertInboxMessage } from "./email-inbox.ts";
+import { isDemoMode } from "../env.ts";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -300,7 +301,7 @@ function headerValue(headers: Array<{ name: string; value: string }> | undefined
 type GmailPart = {
   mimeType?: string;
   filename?: string;
-  body?: { data?: string; size?: number };
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
 };
 
@@ -367,8 +368,9 @@ async function ingestGmailMessages(
 
     let body = message.snippet;
     let receivedAt = message.date ? new Date(message.date).toISOString() : new Date().toISOString();
+    let detail: { payload?: GmailPart; snippet?: string; internalDate?: string } | null = null;
     if (needsBody) {
-      const detail = await googleApi<{
+      detail = await googleApi<{
         id: string;
         snippet?: string;
         internalDate?: string;
@@ -415,6 +417,7 @@ async function ingestGmailMessages(
       from: message.from,
       snippet: message.snippet,
       rawText: body,
+      files: collectGmailFiles(detail?.payload, message.id),
     });
 
     if (created) imported += 1;
@@ -460,31 +463,68 @@ const GMAIL_JOB_QUERIES = [
   'newer_than:60d (invoice OR remittance OR "payment received")',
 ];
 
+function encodeGmailRaw(raw: string) {
+  return Buffer.from(raw)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
 export async function sendApprovedGmailDraft(input: {
   to: string;
   cc?: string;
   subject: string;
   body: string;
+  attachments?: Array<{ filename: string; mimeType: string; content: Buffer }>;
 }) {
   const { accessToken, connection } = await getValidGoogleAccessToken();
   if (isDemoMode() || isDemoGoogleConnection(connection)) {
     return { id: `demo-gmail-${Date.now()}`, threadId: `demo-thread-${Date.now()}` };
   }
-  const headers = [
-    `To: ${input.to}`,
-    input.cc ? `Cc: ${input.cc}` : null,
-    `Subject: ${input.subject}`,
-    "Content-Type: text/plain; charset=utf-8",
-  ]
-    .filter(Boolean)
-    .join("\r\n");
-
-  const raw = `${headers}\r\n\r\n${input.body}`;
-  const encoded = Buffer.from(raw)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  const attachments = (input.attachments ?? []).slice(0, 8);
+  let raw: string;
+  if (!attachments.length) {
+    const headers = [
+      `To: ${input.to}`,
+      input.cc ? `Cc: ${input.cc}` : null,
+      `Subject: ${input.subject}`,
+      "Content-Type: text/plain; charset=utf-8",
+    ]
+      .filter(Boolean)
+      .join("\r\n");
+    raw = `${headers}\r\n\r\n${input.body}`;
+  } else {
+    const boundary = `fortified_${Date.now()}`;
+    const parts = [
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      input.body,
+    ];
+    for (const file of attachments) {
+      parts.push(
+        `--${boundary}`,
+        `Content-Type: ${file.mimeType}; name="${file.filename.replace(/"/g, "")}"`,
+        `Content-Disposition: attachment; filename="${file.filename.replace(/"/g, "")}"`,
+        "Content-Transfer-Encoding: base64",
+        "",
+        file.content.toString("base64")
+      );
+    }
+    parts.push(`--${boundary}--`, "");
+    const headers = [
+      `To: ${input.to}`,
+      input.cc ? `Cc: ${input.cc}` : null,
+      `Subject: ${input.subject}`,
+      "MIME-Version: 1.0",
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ]
+      .filter(Boolean)
+      .join("\r\n");
+    raw = `${headers}\r\n\r\n${parts.join("\r\n")}`;
+  }
+  const encoded = encodeGmailRaw(raw);
 
   const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",
@@ -500,6 +540,38 @@ export async function sendApprovedGmailDraft(input: {
     throw new Error(data?.error?.message || "Failed to send Gmail message.");
   }
   return data as { id: string; threadId?: string };
+}
+
+export async function downloadGmailAttachments(files: IntakeFile[]): Promise<IntakeFile[]> {
+  const pending = files.filter((file) => file.attachmentId && file.messageId && !file.localPath);
+  if (!pending.length) return files;
+  const { accessToken, connection } = await getValidGoogleAccessToken();
+  if (isDemoMode() || isDemoGoogleConnection(connection)) return files;
+
+  const dir = path.join(integrationDir(), "intake-files");
+  await mkdir(dir, { recursive: true });
+  const saved: IntakeFile[] = [];
+  for (const file of pending) {
+    if ((file.size ?? 0) > 12_000_000) {
+      saved.push(file);
+      continue;
+    }
+    const data = await googleApi<{ data?: string }>(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${file.messageId}/attachments/${file.attachmentId}`,
+      accessToken
+    );
+    if (!data.data) {
+      saved.push(file);
+      continue;
+    }
+    const bytes = Buffer.from(data.data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "attachment";
+    const localPath = path.join(dir, `${file.messageId}-${safe}`);
+    await writeFile(localPath, bytes, { mode: 0o600 });
+    saved.push({ ...file, localPath, size: bytes.length });
+  }
+  const byKey = new Map(saved.map((file) => [`${file.messageId}:${file.attachmentId}`, file]));
+  return files.map((file) => byKey.get(`${file.messageId}:${file.attachmentId}`) ?? file);
 }
 
 async function syncDemoGoogleWorkspace(connection: GoogleConnection): Promise<GoogleSyncSummary> {

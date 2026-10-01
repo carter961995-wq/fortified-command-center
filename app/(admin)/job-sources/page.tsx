@@ -11,7 +11,7 @@ export default async function JobSourcesPage({
     <div className="mx-auto grid max-w-5xl gap-6">
       <PageHeader
         title="Job sources"
-        description="Log in once to Gmail, mHelpDesk, or Affiliate Connect. The Command Center pulls current work orders and keeps them organized from there."
+        description="Log in once to Gmail, mHelpDesk, or Affiliate Connect. The Command Center keeps watching those dashboards and the inbox, then builds a Fortified work order and assigns it by job location."
       />
       <JobSourcesSetup googleMessage={sp.google} />
     </div>

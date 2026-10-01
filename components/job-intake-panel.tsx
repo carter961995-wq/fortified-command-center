@@ -59,6 +59,17 @@ type JobIntakeRecord = {
   notes: string;
   scheduledDate?: string | null;
   photoUrls: string[];
+  files?: Array<{ name: string; mimeType?: string; sourceUrl?: string; localPath?: string }>;
+  dispatch?: {
+    status: "assigned" | "sent" | "needs_contractor";
+    contractorName?: string;
+    contractorEmail?: string;
+    reason?: string;
+    fortifiedWorkOrderNumber?: string;
+    documentPath?: string;
+    sentAt?: string;
+    error?: string;
+  } | null;
   workOrderId?: string | null;
   emailDraft?: {
     to: string;
@@ -179,23 +190,19 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
   useEffect(() => {
     let cancelled = false;
     async function boot() {
-      await fetch("/api/integrations/sync-all", {
+      await fetch("/api/integrations/dispatch-monitor", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ auto: true }),
+        body: JSON.stringify({ action: "tick" }),
       }).catch(() => null);
       if (!cancelled) await refresh();
     }
     boot();
     const timer = setInterval(() => {
-      fetch("/api/integrations/sync-all", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ auto: true }),
-      })
+      fetch("/api/integrations/dispatch-monitor")
         .then(() => (cancelled ? null : refresh()))
         .catch(() => null);
-    }, 120000);
+    }, 30000);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -293,8 +300,8 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
           <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Automation</p>
           <h1 className="mt-1 text-3xl font-black uppercase tracking-tight text-white">Job Intake</h1>
           <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-400">
-            Connect Gmail, mHelpDesk, or Affiliate Connect once. The Command Center searches those sources for active
-            work orders and requests for quote. Sample Canal Street / Bayou Retail jobs only appear when demo mode is on.
+            mHelpDesk, Affiliate Connect, and Gmail stay under watch. New assignments are extracted, turned into a
+            Fortified work order, and sent to the contractor for that location.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -460,6 +467,30 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                   </div>
                 </div>
 
+                {selected.dispatch ? (
+                  <div className="mt-4 rounded-lg border border-orange-400/30 bg-[#0c172b] p-4">
+                    <p className="text-xs font-black uppercase tracking-wide text-orange-300">Fortified dispatch</p>
+                    <p className="mt-1 text-lg font-black text-white">
+                      {selected.dispatch.fortifiedWorkOrderNumber || "Waiting on a work order number"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-200">
+                      {selected.dispatch.contractorName
+                        ? `${selected.dispatch.status === "sent" ? "Sent to" : "Assigned to"} ${selected.dispatch.contractorName}`
+                        : "No contractor matched this location yet."}
+                      {selected.dispatch.contractorEmail ? ` · ${selected.dispatch.contractorEmail}` : ""}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-400">{selected.dispatch.error || selected.dispatch.reason}</p>
+                    {selected.dispatch.documentPath ? (
+                      <a
+                        className="mt-3 inline-block text-sm font-black text-orange-300"
+                        href={`/api/integrations/dispatch-files?intakeId=${selected.id}&document=1`}
+                      >
+                        Open branded work order
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <Field label="Work order #" value={selected.parsed.workOrderNumber} />
                   <Field label="Store #" value={selected.parsed.storeNumber} />
@@ -515,6 +546,24 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                         type="date"
                       />
                     </label>
+                    {selected.files?.length ? (
+                      <div className="mt-3 grid gap-1">
+                        <p className="text-xs font-black uppercase text-slate-400">Photos and files</p>
+                        {selected.files.map((file, index) => (
+                          <a
+                            className="text-sm font-semibold text-orange-200"
+                            href={
+                              file.localPath
+                                ? `/api/integrations/dispatch-files?intakeId=${selected.id}&file=${index}`
+                                : file.sourceUrl || "#"
+                            }
+                            key={`${file.name}-${index}`}
+                          >
+                            {file.name}
+                          </a>
+                        ))}
+                      </div>
+                    ) : null}
                     {selected.workOrderId ? (
                       <p className="mt-3 text-xs font-semibold text-emerald-300">
                         Tracker link:{" "}

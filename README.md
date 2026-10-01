@@ -15,6 +15,9 @@ Internal admin dashboard for **Fortified Fence & Weld**: commercial fence, gate,
 - **Settings**: Placeholders for Stripe and QuickBooks integration.
 - **Command Center workspaces**: Planner, leads, grouped Gmail inbox, clients, jobs, measurement tool,
   subcontractor map, website extractor, documents, notepad, fence bible, reports, and dedicated invoicing.
+- **Live dispatch monitor**: The app keeps checking the mHelpDesk dashboard, Affiliate Connect, and the Gmail
+  inbox. A new or newly assigned work order is parsed, including pictures and files, turned into a Fortified
+  branded work order, and assigned or emailed to the predetermined contractor for that job location.
 - **Job Intake (Gmail + mHelpDesk + Affiliate Connect)**: Log in once; the app pulls current work orders,
   searches and groups them by project, and files mailbox items into invitation to bid, quoted, approved quotes,
   work orders, and invoices.
