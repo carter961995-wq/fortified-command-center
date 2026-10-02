@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Check, Mail, RadioTower, Workflow } from "lucide-react";
+import { DispatchMonitorPanel } from "./dispatch-monitor-panel";
 import { GoogleIntegrationPanel } from "./google-integration-panel";
 import { SourceConnectionForm } from "./source-connection-form";
 
@@ -32,6 +33,7 @@ export function JobSourcesSetup({ googleMessage }: { googleMessage?: string }) {
 
   return (
     <div className="grid gap-5">
+      <DispatchMonitorPanel />
       <div className="grid gap-3 md:grid-cols-3">
         {sources.map((source) => {
           const Icon = source.icon;

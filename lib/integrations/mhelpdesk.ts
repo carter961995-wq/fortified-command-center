@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
-import type { JobIntakeRecord, MhelpdeskFieldMap } from "./job-intake";
-import { upsertJobIntakeFromSource } from "./job-intake";
-import { isDemoMode } from "../env";
-import { currentMhelpdeskWorkOrders, pullMhelpdeskLiveJobs, type PortalJobDraft } from "./portal-jobs";
+import type { JobIntakeRecord, MhelpdeskFieldMap } from "./job-intake.ts";
+import { upsertJobIntakeFromSource } from "./job-intake.ts";
+import { isDemoMode } from "../env.ts";
+import { currentMhelpdeskWorkOrders, pullMhelpdeskLiveJobs, type PortalJobDraft } from "./portal-jobs.ts";
 
 export type MhelpdeskConnection = {
   provider: "mhelpdesk";
@@ -75,6 +75,7 @@ async function importPortalJobs(source: "mhelpdesk", drafts: PortalJobDraft[]) {
       snippet: draft.snippet,
       rawText: draft.rawText,
       parsed: draft.parsed,
+      files: draft.files,
     });
     if (created) imported += 1;
     else updated += 1;

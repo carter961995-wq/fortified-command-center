@@ -1,4 +1,5 @@
 import type { ParsedJobFields } from "./job-intake";
+import { collectHtmlFileLinks, fileNameFromUrl, mimeFromName, type IntakeFile } from "./intake-files.ts";
 import { cognitoPasswordSignIn } from "./cognito-auth.ts";
 
 export type PortalJobDraft = {
@@ -8,6 +9,7 @@ export type PortalJobDraft = {
   snippet: string;
   rawText: string;
   parsed: ParsedJobFields;
+  files?: IntakeFile[];
 };
 
 export type PortalPullResult = {
@@ -49,12 +51,14 @@ function job({
   from,
   parsed,
   details,
+  files,
 }: {
   sourceRef: string;
   subject: string;
   from: string;
   parsed: ParsedJobFields;
   details: string;
+  files?: IntakeFile[];
 }): PortalJobDraft {
   const rawText = [
     subject,
@@ -83,7 +87,40 @@ function job({
     snippet: parsed.description || subject,
     rawText,
     parsed: { ...parsed, jobDetails: parsed.jobDetails || details },
+    files,
   };
+}
+
+function collectPortalFiles(record: Record<string, unknown>): IntakeFile[] {
+  const files: IntakeFile[] = [];
+  for (const key of ["attachments", "files", "photos", "pictures", "documents", "images", "media"]) {
+    const value = pick(record, [key]);
+    const list = Array.isArray(value) ? value : value ? [value] : [];
+    for (const item of list) {
+      if (typeof item === "string" && /^https?:\/\//i.test(item)) {
+        files.push({
+          name: fileNameFromUrl(item),
+          mimeType: mimeFromName(item),
+          source: "portal",
+          sourceUrl: item,
+        });
+        continue;
+      }
+      const row = asRecord(item);
+      if (!row) continue;
+      const sourceUrl = asString(pick(row, ["url", "fileUrl", "downloadUrl", "href", "link", "photoUrl"]));
+      const name =
+        asString(pick(row, ["fileName", "filename", "name", "title"])) ||
+        (sourceUrl ? fileNameFromUrl(sourceUrl) : "attachment");
+      files.push({
+        name,
+        mimeType: asString(pick(row, ["mimeType", "contentType"])) || mimeFromName(name),
+        source: "portal",
+        sourceUrl,
+      });
+    }
+  }
+  return files;
 }
 
 export function currentMhelpdeskWorkOrders(loginEmail: string): PortalJobDraft[] {
@@ -324,6 +361,7 @@ export function portalRowToJob(
       tradeType: asString(pick(record, ["tradeType", "trade", "category"])),
     },
     details,
+    files: collectPortalFiles(record),
   });
 }
 
@@ -424,7 +462,11 @@ function parseHtmlTables(html: string, input: { source: "mhelpdesk" | "truesourc
         },
         { source: input.source, email: input.email, index: jobs.length }
       );
-      if (mapped) jobs.push(mapped);
+      if (mapped) {
+        const linked = collectHtmlFileLinks(row);
+        if (linked.length) mapped.files = [...(mapped.files ?? []), ...linked];
+        jobs.push(mapped);
+      }
     }
   }
   return jobs;

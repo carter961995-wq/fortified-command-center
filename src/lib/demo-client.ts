@@ -875,7 +875,9 @@ class DemoQuery implements PromiseLike<any> {
     tableRows.push(...rows);
     persistDemoTables();
     const data = rows.map((row) => attachRelations(this.table, row));
-    if (this.resultMode === "single") return { data: data[0] ?? null, error: null, count: data.length };
+    if (this.resultMode === "single" || this.resultMode === "maybeSingle") {
+      return { data: data[0] ?? null, error: null, count: data.length };
+    }
     return { data, error: null, count: data.length };
   }
 

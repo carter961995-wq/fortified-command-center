@@ -73,6 +73,7 @@ async function importPortalJobs(drafts: PortalJobDraft[]) {
       snippet: draft.snippet,
       rawText: draft.rawText,
       parsed: draft.parsed,
+      files: draft.files,
     });
     if (created) imported += 1;
     else updated += 1;
