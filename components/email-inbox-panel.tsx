@@ -75,7 +75,10 @@ export function EmailInboxPanel({ googleMessage }: { googleMessage?: string }) {
   }, [category, query]);
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
   useEffect(() => {

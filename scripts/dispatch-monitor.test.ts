@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { buildBrandedWorkOrderText } from "../lib/integrations/branded-work-order.ts";
 import { matchContractor, type ContractorCandidate, type DispatchRoute } from "../lib/integrations/contractor-match.ts";
+import { stampLoganApproval } from "../lib/integrations/dispatch-approval.ts";
 import { dispatchIncomingWorkOrders, releaseReviewedDispatch } from "../lib/integrations/dispatch-monitor.ts";
 import { updateJobIntakeRecord, upsertJobIntakeFromSource } from "../lib/integrations/job-intake.ts";
 import { redactSubcontractorDne, subcontractorDneAmount } from "../lib/integrations/subcontractor-dne.ts";
@@ -238,18 +239,16 @@ Trade: Fence`,
 
     await assert.rejects(
       () => releaseReviewedDispatch(nola?.id || "", { sendEmail: async () => ({ id: "should-not-send" }) }),
-      /Review and approve/
+      /Logan must approve/
     );
 
+    const current = JSON.parse(await readFile(path.join(dir, "job-intake.json"), "utf8")) as {
+      records: Array<{ id: string; emailDraft?: { to: string; subject: string; body: string; status: "draft"; updatedAt: string }; files?: []; parsed: { workOrderNumber?: string }; rawText: string; status: "new"; source: "mhelpdesk"; sourceRef: string; receivedAt: string; category: "work_order"; notes: string; photoUrls: string[]; createdAt: string; updatedAt: string }>;
+    };
+    const fresh = current.records.find((record) => record.id === nola?.id);
+    if (!fresh?.emailDraft) throw new Error("missing draft");
     await updateJobIntakeRecord(nola?.id || "", {
-      emailDraft: {
-        to: nola?.emailDraft?.to || "",
-        subject: nola?.emailDraft?.subject || "",
-        body: nola?.emailDraft?.body || "",
-        status: "approved",
-        reviewedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
+      emailDraft: stampLoganApproval(fresh as never, fresh.emailDraft),
     });
 
     const released = await releaseReviewedDispatch(nola?.id || "", {

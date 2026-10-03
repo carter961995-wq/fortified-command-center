@@ -39,7 +39,10 @@ export function MhelpdeskIntegrationPanel() {
   }
 
   useEffect(() => {
-    refresh();
+    const timer = window.setTimeout(() => {
+      void refresh();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function save() {

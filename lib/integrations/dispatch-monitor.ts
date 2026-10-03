@@ -23,6 +23,8 @@ import {
   type JobEmailDraft,
   type JobIntakeRecord,
 } from "./job-intake.ts";
+import { approvalStillMatches } from "./dispatch-approval.ts";
+import { withFileLock } from "../file-lock.ts";
 import { formatMoney, redactSubcontractorDne, subcontractorDneAmount } from "./subcontractor-dne.ts";
 
 export type { JobDispatch };
@@ -200,7 +202,7 @@ async function loadContractors(): Promise<ContractorCandidate[]> {
 
 async function insertAssignedWorkOrder(record: JobIntakeRecord, dispatch: JobDispatch) {
   if (record.workOrderId && !record.workOrderId.startsWith("local-")) return record.workOrderId;
-  if (dispatch.workOrderId) return dispatch.workOrderId;
+  if (dispatch.workOrderId && !dispatch.workOrderId.startsWith("local-")) return dispatch.workOrderId;
   const draft = intakeToWorkOrderDraft(record);
   const row = {
     ...draft,
@@ -337,8 +339,8 @@ export async function dispatchIncomingWorkOrders(options?: {
   const routes = options?.routes ?? (await loadDispatchRoutes());
   const contractors = options?.contractors ?? (await loadContractors());
   const items: DispatchCycleResult["items"] = [];
-  let assigned = 0;
-  let sent = 0;
+  const assigned = 0;
+  const sent = 0;
   let pendingReview = 0;
   let needsContractor = 0;
   let skipped = 0;
@@ -483,6 +485,7 @@ export async function releaseReviewedDispatch(
     sendEmail?: (input: OutboundEmail) => Promise<{ id: string }>;
   }
 ) {
+  return withFileLock(`dispatch-${intakeId}`, async () => {
   const record = await getJobIntakeRecord(intakeId);
   if (!record) throw new Error("Not found.");
   const current = record.dispatch;
@@ -490,7 +493,7 @@ export async function releaseReviewedDispatch(
     throw new Error("This job is not ready to dispatch.");
   }
   if (current.status === "sent") {
-    throw new Error("This dispatch was already sent.");
+    return { record, gmailMessageId: undefined, alreadySent: true };
   }
 
   const draft: JobEmailDraft = {
@@ -500,8 +503,8 @@ export async function releaseReviewedDispatch(
     ...(options?.subject ? { subject: options.subject } : {}),
     ...(options?.body ? { body: options.body } : {}),
   };
-  if (draft.status !== "approved" || !draft.reviewedAt) {
-    throw new Error("Review and approve the dispatch before it is sent.");
+  if (!approvalStillMatches(record, draft)) {
+    throw new Error("Logan must approve this exact dispatch before it is sent.");
   }
 
   const to = (draft.to || current.contractorEmail || "").trim();
@@ -510,7 +513,11 @@ export async function releaseReviewedDispatch(
   const files = record.files ?? [];
   let workOrderId = current.workOrderId || record.workOrderId || undefined;
   if (!workOrderId || workOrderId.startsWith("local-")) {
-    workOrderId = (await insertAssignedWorkOrder({ ...record, files }, current)) ?? workOrderId ?? `local-${record.id}`;
+    const created = await insertAssignedWorkOrder({ ...record, files }, current);
+    if (!created || created.startsWith("local-")) {
+      throw new Error("Work order was not created, so the dispatch was not sent.");
+    }
+    workOrderId = created;
   }
 
   const outboundBody = redactSubcontractorDne(draft.body, record.parsed.dneAmount);
@@ -560,6 +567,7 @@ export async function releaseReviewedDispatch(
   });
 
   return { record: updated, gmailMessageId };
+  });
 }
 
 export async function sendReviewedJobIntakeEmail(input: {
@@ -586,8 +594,8 @@ export async function sendReviewedJobIntakeEmail(input: {
     ...(input.body ? { body: input.body } : {}),
   };
   if (!draft.to?.trim()) throw new Error("Draft is missing a recipient.");
-  if (draft.status !== "approved" || !draft.reviewedAt) {
-    throw new Error("Approve the email draft first, then send.");
+  if (!approvalStillMatches(record, draft)) {
+    throw new Error("Logan must approve this exact dispatch before it is sent.");
   }
 
   const contractorEmail = record.dispatch?.contractorEmail?.trim().toLowerCase();

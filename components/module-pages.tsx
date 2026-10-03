@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { addInvoiceLineItemAction, addJobCostAction, addMaintenanceVisitAction, addPaymentAction, addQuoteLineItemAction, advanceWorkOrderStatusAction, createRecordAction, createWorkOrderFromVisitAction, updateRecordAction } from "../lib/actions";
+import { addInvoiceAdjustmentAction, addInvoiceLineItemAction, addJobCostAction, addMaintenanceVisitAction, addPaymentAction, addQuoteLineItemAction, advanceWorkOrderStatusAction, createRecordAction, createWorkOrderFromVisitAction, updateRecordAction } from "../lib/actions";
 import { displayValue, formatDate, money, nextWorkOrderStatus, percent, type PlainRow } from "../lib/business";
-import { fetchInvoiceRelated, fetchMaintenanceVisits, fetchModuleRecord, fetchModuleRows, fetchRelationOptions, fetchWorkOrderRelated, getSessionContext, moduleForSlug } from "../lib/data";
+import { fetchInvoiceRelated, fetchMaintenanceVisits, fetchModulePage, fetchModuleRecord, fetchRelationOptions, fetchWorkOrderRelated, getSessionContext, moduleForSlug } from "../lib/data";
+import { RelationPicker } from "./relation-picker";
 import type { ModuleDefinition, ModuleField } from "../lib/schema";
 import { workOrderLifecycle } from "../lib/schema";
 import { DataTable } from "./data-table";
@@ -38,15 +39,17 @@ function FormField({ field, value, options }: { field: ModuleField; value?: unkn
       </label>
     );
   }
-  if (field.type === "relation") {
+  if (field.type === "relation" && field.relation) {
     return (
-      <label>
-        {field.label}
-        <select name={inputName} defaultValue={defaultValue} required={field.required}>
-          <option value="">{field.required ? "Select..." : "None"}</option>
-          {(options ?? []).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-        </select>
-      </label>
+      <RelationPicker
+        name={inputName}
+        label={field.label}
+        table={field.relation.table}
+        labelKey={field.relation.label}
+        required={field.required}
+        defaultValue={defaultValue}
+        initialOptions={options ?? []}
+      />
     );
   }
   if (field.type === "checkbox") {
@@ -82,15 +85,31 @@ async function RecordForm({ def, record, id }: { def: ModuleDefinition; record?:
   );
 }
 
-export async function ModuleListPage({ slug }: { slug: string }) {
+export async function ModuleListPage({ slug, page = 1, q = "", status = "" }: { slug: string; page?: number; q?: string; status?: string }) {
   const def = moduleForSlug(slug);
   if (!def) notFound();
-  const { data, error } = await fetchModuleRows(def);
+  const result = await fetchModulePage(def, { page, q, status });
+  const statusField = def.fields.find((field) => field.name === def.statusField && field.type === "select");
+  const empty = result.total === 0 && !q && !status;
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 gap-6">
       <PageHeader title={def.label} description={def.description} action={<ButtonLink href={`/${def.slug}/new`}>New {def.singular}</ButtonLink>} />
-      <ErrorNotice message={error} />
-      {data.length ? <DataTable rows={data} columns={def.listColumns} basePath={`/${def.slug}`} primaryKey={def.primaryField} /> : <EmptyState title={`No ${def.label.toLowerCase()} yet`} description={`Create the first ${def.singular.toLowerCase()} to start tracking this part of the business.`} action={<ButtonLink href={`/${def.slug}/new`}>New {def.singular}</ButtonLink>} />}
+      <ErrorNotice message={result.error} />
+      {empty ? <EmptyState title={`No ${def.label.toLowerCase()} yet`} description={`Create the first ${def.singular.toLowerCase()} to start tracking this part of the business.`} action={<ButtonLink href={`/${def.slug}/new`}>New {def.singular}</ButtonLink>} /> : (
+        <DataTable
+          rows={result.rows}
+          columns={def.listColumns}
+          basePath={`/${def.slug}`}
+          primaryKey={def.primaryField}
+          slug={def.slug}
+          page={result.page}
+          pageSize={result.pageSize}
+          total={result.total}
+          q={q}
+          status={status}
+          statuses={statusField?.options ?? []}
+        />
+      )}
     </div>
   );
 }
@@ -219,10 +238,16 @@ async function InvoiceRelated({ record }: { record: PlainRow }) {
       <Card>
         <h2 className="mb-4 text-lg font-black">Record payment</h2>
         <form action={addPaymentAction.bind(null, String(record.id), String(record.customer_id))} className="grid gap-3">
-          <div className="grid gap-3 md:grid-cols-2"><input name="amount" placeholder="Amount" step="0.01" type="number" required /><input name="payment_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></div>
+          <div className="grid gap-3 md:grid-cols-2"><input name="amount" placeholder="Amount" min="0.01" step="0.01" inputMode="decimal" type="number" required /><input name="payment_date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} /></div>
           <div className="grid gap-3 md:grid-cols-2"><select name="payment_method"><option>cash</option><option>check</option><option>ach</option><option>card</option><option>wire</option><option>other</option></select><input name="reference_number" placeholder="Reference #" /></div>
           <textarea name="notes" placeholder="Payment notes" />
+          <p className="text-xs text-stone-500">Payments must be greater than zero, with at most two decimal places. Refunds use the adjustment form.</p>
           <SubmitButton>Record payment</SubmitButton>
+        </form>
+        <form action={addInvoiceAdjustmentAction.bind(null, String(record.id), String(record.customer_id))} className="mt-6 grid gap-3 border-t border-stone-200 pt-4">
+          <h3 className="text-sm font-black">Record adjustment</h3>
+          <div className="grid gap-3 md:grid-cols-2"><input name="amount" placeholder="Signed amount, for example -25.00" step="0.01" inputMode="decimal" required /><input name="reason" placeholder="Reason for the refund or adjustment" required /></div>
+          <SubmitButton>Save adjustment</SubmitButton>
         </form>
       </Card>
       <MiniTable title="Payments" rows={related.payments} columns={[{ key: "payment_date", label: "Date", type: "date" }, { key: "payment_method", label: "Method" }, { key: "amount", label: "Amount", type: "money" }, { key: "reference_number", label: "Reference" }]} />

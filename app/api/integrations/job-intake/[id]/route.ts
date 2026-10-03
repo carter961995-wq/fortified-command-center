@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   buildDefaultEmailDraft,
-  buildMhelpdeskFieldMap,
   getJobIntakeRecord,
   intakeToWorkOrderDraft,
   updateJobIntakeRecord,
@@ -9,8 +8,8 @@ import {
   type ParsedJobFields,
 } from "../../../../../lib/integrations/job-intake";
 import { stageMhelpdeskPush } from "../../../../../lib/integrations/mhelpdesk";
-import { createSupabaseServerClient } from "../../../../../lib/supabase/server";
-import { isDemoMode } from "../../../../../lib/env";
+import { acceptJobIntake } from "../../../../../lib/integrations/accept-intake";
+import { stampLoganApproval } from "../../../../../lib/integrations/dispatch-approval";
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -61,16 +60,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
 
     if (body.action === "approve_email") {
-      const draft = existing.emailDraft ?? buildDefaultEmailDraft(existing);
-      const reviewedAt = new Date().toISOString();
+      const draft = {
+        ...(existing.emailDraft ?? buildDefaultEmailDraft(existing)),
+        ...body.emailDraft,
+      };
       const updated = await updateJobIntakeRecord(id, {
-        emailDraft: {
-          ...draft,
-          ...body.emailDraft,
-          status: "approved",
-          reviewedAt,
-          updatedAt: reviewedAt,
-        },
+        emailDraft: stampLoganApproval({ ...existing, emailDraft: draft }, draft),
       });
       return NextResponse.json({ ok: true, record: updated });
     }
@@ -86,74 +81,18 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
 
     if (body.action === "accept_to_tracker") {
-      const draft = intakeToWorkOrderDraft({
-        ...existing,
-        notes: body.notes ?? existing.notes,
-        scheduledDate: body.scheduledDate ?? existing.scheduledDate,
-        parsed: body.parsed ? { ...existing.parsed, ...body.parsed } : existing.parsed,
+      const accepted = await acceptJobIntake(id, {
+        notes: body.notes,
+        scheduledDate: body.scheduledDate,
+        parsed: body.parsed,
       });
-
-      let workOrderId: string | null = existing.workOrderId ?? null;
-
-      if (!isDemoMode()) {
-        const supabase = await createSupabaseServerClient();
-        if (supabase) {
-          // Create a lightweight tracker row when customer/location relations are not yet chosen.
-          // Store commercial fields in notes until the user links customer/location.
-          const { data, error } = await supabase
-            .from("work_orders")
-            .insert({
-              title: draft.title,
-              scope_summary: draft.scope_summary,
-              trade_type: draft.trade_type,
-              priority: draft.priority,
-              status: "New",
-              source: draft.source,
-              customer_work_order_number: draft.customer_work_order_number,
-              purchase_order_number: draft.purchase_order_number,
-              not_to_exceed_amount: draft.not_to_exceed_amount,
-              requested_date: draft.requested_date,
-              due_date: draft.due_date,
-              scheduled_date: draft.scheduled_date,
-              customer_notes: draft.customer_notes,
-              internal_notes: draft.internal_notes,
-            })
-            .select("id")
-            .maybeSingle();
-
-          if (!error && data?.id) {
-            workOrderId = String(data.id);
-          }
-        }
-      }
-
-      if (!workOrderId) {
-        workOrderId = `local-${id}`;
-      }
-
-      const updated = await updateJobIntakeRecord(id, {
-        status: "tracked",
-        workOrderId,
-        notes: body.notes ?? existing.notes,
-        scheduledDate: body.scheduledDate ?? existing.scheduledDate,
-        parsed: body.parsed ? { ...existing.parsed, ...body.parsed } : existing.parsed,
-        mhelpdeskPush: {
-          status: existing.mhelpdeskPush?.status ?? "needs_connection",
-          fieldMap: buildMhelpdeskFieldMap({
-            ...existing,
-            notes: body.notes ?? existing.notes,
-            scheduledDate: body.scheduledDate ?? existing.scheduledDate,
-            parsed: body.parsed ? { ...existing.parsed, ...body.parsed } : existing.parsed,
-          }),
-          updatedAt: new Date().toISOString(),
-        },
-      });
-
       return NextResponse.json({
         ok: true,
-        record: updated,
-        workOrderDraft: draft,
-        trackerLink: workOrderId.startsWith("local-") ? `/job-intake?id=${id}` : `/work-orders/${workOrderId}`,
+        record: accepted.record,
+        workOrderId: accepted.workOrderId,
+        workOrderDraft: intakeToWorkOrderDraft(accepted.record),
+        trackerLink: accepted.trackerLink,
+        created: accepted.created,
       });
     }
 
@@ -164,7 +103,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
           updatedAt: new Date().toISOString(),
         }
       : undefined;
-    if (nextDraft?.status === "draft") delete nextDraft.reviewedAt;
+    if (nextDraft?.status === "draft") {
+      delete nextDraft.reviewedAt;
+      delete nextDraft.approvedBy;
+      delete nextDraft.approvalFingerprint;
+    }
 
     const updated = await updateJobIntakeRecord(id, {
       status: body.status,

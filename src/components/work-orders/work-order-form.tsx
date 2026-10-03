@@ -44,18 +44,21 @@ export function WorkOrderForm({ workOrder, customers, subcontractors }: WorkOrde
   const isEdit = !!workOrder;
 
   useEffect(() => {
-    if (!customerId) {
-      setLocations([]);
-      return;
-    }
-    const supabase = createClient();
-    supabase
-      .from("locations")
-      .select("id, name")
-      .eq("customer_id", customerId)
-      .eq("is_active", true)
-      .order("name")
-      .then(({ data }) => setLocations(data ?? []));
+    const timer = window.setTimeout(() => {
+      if (!customerId) {
+        setLocations([]);
+        return;
+      }
+      const supabase = createClient();
+      void supabase
+        .from("locations")
+        .select("id, name")
+        .eq("customer_id", customerId)
+        .eq("is_active", true)
+        .order("name")
+        .then(({ data }) => setLocations(data ?? []));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [customerId]);
 
   async function handleSubmit(formData: FormData) {

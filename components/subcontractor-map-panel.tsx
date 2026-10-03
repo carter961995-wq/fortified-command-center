@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Loader2, MapPin, Plus, Radar, Search, Satellite } from "lucide-react";
-import { assignWorkOrderSubcontractor } from "../lib/actions";
+import { approveWorkOrderDispatch, assignWorkOrderSubcontractor } from "../lib/actions";
 import type { SubcontractorMapPin, WorkOrderMapPin } from "../lib/subcontractor-pins";
 
 const LeafletMap = dynamic(() => import("./subcontractor-map-leaflet"), {
@@ -58,7 +58,12 @@ export function SubcontractorMapPanel({
     setDispatchingId(workOrderId);
     setDispatchMessage(null);
     try {
-      const result = await assignWorkOrderSubcontractor(workOrderId, selected.id);
+      const approved = await approveWorkOrderDispatch(workOrderId, selected.id);
+      if (approved.error || !approved.approvalId) {
+        setDispatchMessage(approved.error ?? "Logan must approve this dispatch before it is sent.");
+        return;
+      }
+      const result = await assignWorkOrderSubcontractor(workOrderId, selected.id, approved.approvalId);
       setDispatchMessage(result.error ?? `Dispatched ${selected.companyName} after review.`);
       if (!result.error) {
         setReviewJobId(null);
@@ -72,7 +77,7 @@ export function SubcontractorMapPanel({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
       <aside className="overflow-hidden rounded-xl border border-[#1f304d] bg-[#111f38]">
         <div className="border-b border-[#1f304d] p-4">
           <label className="flex items-center gap-2 rounded-lg border border-[#223758] bg-[#0c172b] px-3 py-2 text-slate-300">
@@ -173,7 +178,7 @@ export function SubcontractorMapPanel({
                   ) : null}
                 </div>
               </div>
-              <div className="min-w-[240px] rounded-xl border border-[#223758] bg-[#0c172b] p-3">
+              <div className="w-full min-w-0 max-w-full rounded-xl border border-[#223758] bg-[#0c172b] p-3 lg:max-w-xs">
                 <p className="text-xs font-black uppercase tracking-wide text-slate-400">Review dispatch</p>
                 {reviewJob ? (
                   <div className="mt-2 grid gap-2">
@@ -190,7 +195,7 @@ export function SubcontractorMapPanel({
                       onClick={() => void confirmDispatch()}
                       className="rounded-lg bg-orange-500 px-3 py-2 text-left text-xs font-black text-white hover:bg-orange-400"
                     >
-                      {dispatchingId === reviewJob.id ? "Assigning..." : "Confirm dispatch"}
+                      {dispatchingId === reviewJob.id ? "Assigning..." : "Approve and assign"}
                     </button>
                     <button
                       type="button"

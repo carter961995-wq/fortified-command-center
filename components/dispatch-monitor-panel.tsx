@@ -77,12 +77,17 @@ export function DispatchMonitorPanel() {
   }
 
   useEffect(() => {
-    void loadState();
-    void loadRoutes();
-    const timer = setInterval(() => {
+    const start = window.setTimeout(() => {
+      void loadState();
+      void loadRoutes();
+    }, 0);
+    const timer = window.setInterval(() => {
       void loadState();
     }, 15000);
-    return () => clearInterval(timer);
+    return () => {
+      window.clearTimeout(start);
+      window.clearInterval(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

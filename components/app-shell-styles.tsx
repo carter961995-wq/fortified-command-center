@@ -30,6 +30,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app-shell {
   display: flex;
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   background: var(--app-bg);
   color: var(--app-fg);
 }
@@ -104,7 +107,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: 0.8rem;
 }
 
-.app-content { flex: 1; min-width: 0; }
+.app-content { flex: 1; min-width: 0; max-width: 100%; overflow-x: clip; }
 
 .app-mobile-bar {
   display: block;
@@ -122,9 +125,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .app-mobile-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.45rem;
   margin-top: 0.75rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .app-chip {
@@ -147,7 +153,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 700;
 }
 
-.app-main { min-height: 100vh; padding: 1.25rem; background: #0b1629; }
+.app-main { min-height: 100vh; min-width: 0; max-width: 100%; padding: 1.25rem; background: #0b1629; overflow-x: clip; }
 
 .app-page { display: grid; gap: 1.25rem; max-width: 80rem; margin: 0 auto; }
 

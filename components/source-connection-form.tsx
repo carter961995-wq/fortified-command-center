@@ -48,7 +48,10 @@ export function SourceConnectionForm({
   }
 
   useEffect(() => {
-    refresh();
+    const timer = window.setTimeout(() => {
+      void refresh();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [apiPath]);
 
   function connectAndPull() {

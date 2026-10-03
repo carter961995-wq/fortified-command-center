@@ -49,6 +49,8 @@ export type JobEmailDraft = {
   status: "draft" | "approved" | "sent";
   updatedAt: string;
   reviewedAt?: string;
+  approvedBy?: string;
+  approvalFingerprint?: string;
   sentAt?: string;
 };
 
@@ -319,6 +321,16 @@ export function buildMhelpdeskFieldMap(record: JobIntakeRecord): MhelpdeskFieldM
   };
 }
 
+const NEXT_INTAKE_LABEL =
+  "(?:\\n\\s*(?:PO|P\\.O\\.|Purchase\\s*Order|Work\\s*Order|WO|W\\.O\\.|Scope(?:\\s*of\\s*Work)?|Description|Issue|Problem|Details|Instructions|Notes|DNE|NTE|Not\\s*to\\s*Exceed|Timeframe|Window|Due|Requested|Store|Customer|Client|Account|Location|Site|Facility|Address|City|State|Zip|Postal|Priority|Trade|Contact|Phone|Email)\\b)";
+
+function labeledBlock(text: string, labels: string[]) {
+  const names = labels.map((label) => label.replace(/\s+/g, "\\s*")).join("|");
+  const match = text.match(new RegExp(`(?:^|\\n)\\s*(?:${names})\\s*[:#-]\\s*([\\s\\S]*?)(?=${NEXT_INTAKE_LABEL}|$)`, "i"));
+  const value = match?.[1]?.replace(/\s+$/g, "").trim();
+  return value || undefined;
+}
+
 function heuristicParse(rawText: string, subject?: string): ParsedJobFields {
   // Prefer body over subject so short subjects like "WO assigned" do not steal identifiers.
   const text = `${rawText}\n${subject ?? ""}`;
@@ -327,14 +339,18 @@ function heuristicParse(rawText: string, subject?: string): ParsedJobFields {
 
   const dneRaw = pick(new RegExp(`\\b(?:DNE|NTE|Not\\s*to\\s*Exceed)${label}\\$?\\s*([0-9,.]+)`, "i"));
   const dneAmount = dneRaw ? Number(dneRaw.replace(/,/g, "")) : null;
+  const scope = labeledBlock(rawText, ["Scope of work", "Scope of Work", "Scope"]);
+  const description = labeledBlock(rawText, ["Description", "Issue", "Problem"]);
+  const details = labeledBlock(rawText, ["Details", "Instructions", "Notes"]);
+  const jobDetails = [scope, details].filter(Boolean).join("\n\n") || undefined;
 
   return {
     workOrderNumber:
-      pick(new RegExp(`\\bWork\\s*Order${label}([A-Z0-9-]{2,})`, "i")) ||
-      pick(new RegExp(`\\b(?:WO|W\\.O\\.)${label}([A-Z0-9]*\\d[A-Z0-9-]*)`, "i")),
+      pick(new RegExp(`\\bWork\\s*Order(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")) ||
+      pick(new RegExp(`\\b(?:WO|W\\.O\\.)(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")),
     purchaseOrderNumber:
-      pick(new RegExp(`\\bPurchase\\s*Order${label}([A-Z0-9-]{2,})`, "i")) ||
-      pick(new RegExp(`\\b(?:PO|P\\.O\\.)${label}([A-Z0-9]*\\d[A-Z0-9-]*)`, "i")),
+      pick(new RegExp(`\\bPurchase\\s*Order(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")) ||
+      pick(new RegExp(`\\bP\\.?O\\.?(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")),
     storeNumber: pick(new RegExp(`\\bStore${label}([A-Z0-9-]{1,})`, "i")),
     customerName: pick(new RegExp(`\\b(?:Customer|Client|Account)${label}([^\\n]+)`, "i")),
     locationName: pick(new RegExp(`\\b(?:Location|Site|Facility)${label}([^\\n]+)`, "i")),
@@ -342,8 +358,8 @@ function heuristicParse(rawText: string, subject?: string): ParsedJobFields {
     city: pick(new RegExp(`\\bCity${label}([^\\n]+)`, "i")),
     state: pick(new RegExp(`\\bState${label}([A-Z]{2})\\b`, "i")),
     zip: pick(new RegExp(`\\b(?:Zip|Postal)${label}(\\d{5}(?:-\\d{4})?)`, "i")),
-    description: pick(new RegExp(`\\b(?:Description|Issue|Problem|Scope)${label}([^\\n]+)`, "i")) || subject,
-    jobDetails: pick(new RegExp(`\\b(?:Details|Instructions|Notes)${label}([\\s\\S]{0,500})`, "i")),
+    description: description || (jobDetails ? undefined : subject),
+    jobDetails,
     dneAmount: Number.isFinite(dneAmount as number) ? dneAmount : null,
     timeframe: pick(new RegExp(`\\b(?:Timeframe|Window|Service\\s*Window|Complete\\s*by)${label}([^\\n]+)`, "i")),
     dueDate: pick(
@@ -655,7 +671,7 @@ export function intakeToWorkOrderDraft(record: JobIntakeRecord) {
 
   return {
     title,
-    scope_summary: [p.jobDetails, p.timeframe ? `Timeframe: ${p.timeframe}` : null, record.notes]
+    scope_summary: [p.description, p.jobDetails, p.timeframe ? `Timeframe: ${p.timeframe}` : null, record.notes]
       .filter(Boolean)
       .join("\n\n"),
     trade_type: p.tradeType || "Facilities Maintenance",

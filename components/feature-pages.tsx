@@ -10,9 +10,12 @@ import { EmailInboxPanel } from "./email-inbox-panel";
 import { SubcontractorMapPanel } from "./subcontractor-map-panel";
 import { WebsiteExtractorPanel } from "./website-extractor-panel";
 import { FenceBiblePanel } from "./fence-bible-panel";
-import { displayValue, money, type PlainRow } from "../lib/business";
+import { displayValue, formatDate, money, type PlainRow } from "../lib/business";
 import { featurePageMap, moduleMap } from "../lib/schema";
-import { fetchModuleRows } from "../lib/data";
+import { fetchDocumentLibrary, fetchInvoiceSummary, fetchModulePage, fetchModuleRows, fetchPlannerColumns } from "../lib/data";
+import { listNotes } from "../lib/notepad-store";
+import { DocumentsWorkspace } from "./documents-workspace";
+import { NotepadWorkspace } from "./notepad-workspace";
 import { toSubcontractorPins, toWorkOrderPins } from "../lib/subcontractor-pins";
 import { loadGptStore } from "../lib/integrations/gpt-bridge";
 
@@ -47,8 +50,7 @@ function ComingSoonTool({ title, description, bullets }: { title: string; descri
 }
 
 async function LeadsPage() {
-  const { data: customers, error } = await fetchModuleRows(moduleMap.customers);
-  const leads = customers.filter((row) => row.status === "prospect");
+  const { rows: leads, error } = await fetchModulePage(moduleMap.customers, { status: "prospect", pageSize: 50 });
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
       <ToolHeader
@@ -58,7 +60,8 @@ async function LeadsPage() {
       />
       <ErrorNotice message={error} />
       <div className="grid gap-4">
-        {(leads.length ? leads : customers.slice(0, 4)).map((lead) => (
+        {leads.length === 0 ? <p className="text-sm text-slate-400">No prospect leads yet. Add one when a bid or call comes in.</p> : null}
+        {leads.map((lead) => (
           <Link className="rounded-xl border border-[#223758] bg-[#111f38] p-4 hover:border-orange-500/50" href={`/customers/${String(lead.id)}`} key={String(lead.id)}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -77,21 +80,26 @@ async function LeadsPage() {
 }
 
 async function PlannerPage() {
-  const { data: jobs, error } = await fetchModuleRows(moduleMap["work-orders"]);
-  const scheduled = jobs.filter((job) => job.scheduled_date);
+  const planner = await fetchPlannerColumns();
+  const columns: { title: string; rows: PlainRow[]; count: number }[] = [
+    { title: "Today", rows: planner.today, count: planner.counts.today },
+    { title: "This Week", rows: planner.week, count: planner.counts.week },
+    { title: "Upcoming", rows: planner.upcoming, count: planner.counts.upcoming },
+    { title: "Unscheduled", rows: planner.unscheduled, count: planner.counts.unscheduled },
+  ];
   return (
-    <div className="mx-auto grid max-w-6xl gap-6">
-      <ToolHeader title="Planner" description="Dispatch calendar for estimates, installs, service calls, and follow-ups." />
-      <ErrorNotice message={error} />
-      <div className="grid gap-4 lg:grid-cols-3">
-        {["Today", "This Week", "Needs Scheduling"].map((column) => (
-          <section className="rounded-xl border border-[#1f304d] bg-[#111f38]" key={column}>
-            <h2 className="border-b border-[#1f304d] p-4 font-black uppercase text-white">{column}</h2>
+    <div className="mx-auto grid min-w-0 max-w-6xl gap-6">
+      <ToolHeader title="Planner" description="Today, this Monday-through-Sunday week, upcoming dates, and unscheduled open jobs. Closed and cancelled jobs stay out of these columns." />
+      <ErrorNotice message={planner.error} />
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {columns.map((column) => (
+          <section className="min-w-0 rounded-xl border border-[#1f304d] bg-[#111f38]" key={column.title}>
+            <h2 className="border-b border-[#1f304d] p-4 font-black uppercase text-white">{column.title} · {column.count}</h2>
             <div className="grid gap-3 p-4">
-              {(column === "Needs Scheduling" ? jobs.filter((job) => !job.scheduled_date) : scheduled).slice(0, 4).map((job) => (
-                <Link className="rounded-lg bg-[#0c172b] p-3 hover:bg-[#14233d]" href={`/work-orders/${String(job.id)}`} key={`${column}-${String(job.id)}`}>
+              {column.rows.length === 0 ? <p className="text-sm text-slate-400">Nothing in this range.</p> : column.rows.map((job) => (
+                <Link className="rounded-lg bg-[#0c172b] p-3 hover:bg-[#14233d]" href={`/work-orders/${String(job.id)}`} key={`${column.title}-${String(job.id)}`}>
                   <p className="font-black text-white">{displayValue(job, "title")}</p>
-                  <p className="mt-1 text-xs font-semibold text-slate-400">{displayValue(job, "work_order_number")} · {displayValue(job, "status")}</p>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">{displayValue(job, "work_order_number")} · {formatDate(job.scheduled_date)} · {displayValue(job, "status")}</p>
                 </Link>
               ))}
             </div>
@@ -130,19 +138,18 @@ async function SubcontractorMapPage() {
 }
 
 async function InvoicingToolPage() {
-  const { data: invoices, error } = await fetchModuleRows(moduleMap.invoices);
-  const unpaid = invoices.filter((invoice) => Number(invoice.balance_due ?? 0) > 0);
+  const summary = await fetchInvoiceSummary();
   return (
-    <div className="mx-auto grid max-w-6xl gap-6">
-      <ToolHeader title="Invoicing" description="Invoice creation, tracking, balances, PDFs, and payment follow-up." action={<Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/invoices/new">New invoice</Link>} />
-      <ErrorNotice message={error} />
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card><p className="text-sm font-bold text-slate-400">Open invoices</p><p className="mt-2 text-3xl font-black text-white">{unpaid.length}</p></Card>
-        <Card><p className="text-sm font-bold text-slate-400">Outstanding balance</p><p className="mt-2 text-3xl font-black text-orange-300">{money(unpaid.reduce((sum, invoice) => sum + Number(invoice.balance_due ?? 0), 0))}</p></Card>
-        <Card><p className="text-sm font-bold text-slate-400">Tracked invoices</p><p className="mt-2 text-3xl font-black text-white">{invoices.length}</p></Card>
+    <div className="mx-auto grid min-w-0 max-w-6xl gap-6">
+      <ToolHeader title="Invoicing" description="Invoice creation, tracking, balances, PDFs, and payment follow-up. Totals count every invoice, not just the rows on this page." action={<Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/invoices/new">New invoice</Link>} />
+      <ErrorNotice message={summary.error} />
+      <div className="grid min-w-0 gap-4 md:grid-cols-3">
+        <Card><p className="text-sm font-bold text-slate-400">Open invoices</p><p className="mt-2 text-3xl font-black text-white">{summary.openCount}</p></Card>
+        <Card><p className="text-sm font-bold text-slate-400">Outstanding balance</p><p className="mt-2 text-3xl font-black text-orange-300">{money(summary.outstanding)}</p></Card>
+        <Card><p className="text-sm font-bold text-slate-400">Tracked invoices</p><p className="mt-2 text-3xl font-black text-white">{summary.tracked}</p></Card>
       </div>
       <div className="grid gap-3">
-        {invoices.map((invoice) => (
+        {summary.recent.map((invoice) => (
           <Link className="rounded-xl border border-[#223758] bg-[#111f38] p-4 hover:border-orange-500/50" href={`/invoices/${String(invoice.id)}`} key={String(invoice.id)}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -163,10 +170,15 @@ async function FenceBiblePage() {
   return <FenceBiblePanel initialBusiness={store.business} initialKnowledge={store.knowledge} />;
 }
 
-export async function FeaturePage({ slug, googleMessage }: { slug: string; googleMessage?: string }) {
+export async function FeaturePage({ slug, googleMessage, query = "" }: { slug: string; googleMessage?: string; query?: string }) {
   const page = featurePageMap[slug];
   if (slug === "planner") return <PlannerPage />;
   if (slug === "leads") return <LeadsPage />;
+  if (slug === "documents") {
+    const library = await fetchDocumentLibrary(query);
+    return <DocumentsWorkspace documents={library.documents} photos={library.photos} error={library.error} query={query} />;
+  }
+  if (slug === "notepad") return <NotepadWorkspace notes={await listNotes()} />;
   if (slug === "job-intake") return <JobIntakePanel />;
   if (slug === "email-inbox") return <EmailInboxPage googleMessage={googleMessage} />;
   if (slug === "measurement-tool") return <MeasurementTool />;
