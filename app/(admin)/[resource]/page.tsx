@@ -7,12 +7,13 @@ export default async function ResourcePage({
   searchParams,
 }: {
   params: Promise<{ resource: string }>;
-  searchParams: Promise<{ google?: string }>;
+  searchParams: Promise<{ google?: string; page?: string; q?: string; status?: string }>;
 }) {
   const { resource } = await params;
   const sp = await searchParams;
   if (featurePageMap[resource] || resource === "invoices") {
-    return <FeaturePage slug={resource} googleMessage={sp.google} />;
+    return <FeaturePage slug={resource} googleMessage={sp.google} query={sp.q} />;
   }
-  return <ModuleListPage slug={resource} />;
+  const page = Number(sp.page ?? "1");
+  return <ModuleListPage slug={resource} page={Number.isFinite(page) ? page : 1} q={sp.q ?? ""} status={sp.status ?? ""} />;
 }

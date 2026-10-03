@@ -36,6 +36,7 @@ type MonitorState = {
     message: string;
     assigned: number;
     sent: number;
+    pendingReview?: number;
     needsContractor: number;
     items: Array<{
       intakeId: string;
@@ -76,12 +77,17 @@ export function DispatchMonitorPanel() {
   }
 
   useEffect(() => {
-    void loadState();
-    void loadRoutes();
-    const timer = setInterval(() => {
+    const start = window.setTimeout(() => {
+      void loadState();
+      void loadRoutes();
+    }, 0);
+    const timer = window.setInterval(() => {
       void loadState();
     }, 15000);
-    return () => clearInterval(timer);
+    return () => {
+      window.clearTimeout(start);
+      window.clearInterval(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,18 +106,6 @@ export function DispatchMonitorPanel() {
       }
       setState(body.state);
       setMessage(body.summary?.message || (action === "stop" ? "Watching is paused." : "Checked the sources."));
-    });
-  }
-
-  function saveSettings(autoSend: boolean) {
-    startTransition(async () => {
-      const response = await fetch("/api/integrations/dispatch-monitor", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "settings", autoSend }),
-      });
-      const body = await response.json();
-      if (response.ok) setState(body.state);
     });
   }
 
@@ -166,9 +160,9 @@ export function DispatchMonitorPanel() {
           </p>
           <h2 className="mt-1 text-2xl font-black text-white">Watch for new work orders</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200">
-            The Command Center keeps checking mHelpDesk, Affiliate Connect, and Gmail. When a work order is created or
-            assigned, it pulls the job details and pictures, builds a Fortified work order, and sends it to the
-            contractor already set for that location.
+            The Command Center keeps checking mHelpDesk, Affiliate Connect, and Gmail. A new work order is matched to
+            the contractor for that location and held in Job Intake. Review the crew, photos, and subcontractor
+            not-to-exceed, then approve and send. Their not-to-exceed is half of the DNE we received.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -198,19 +192,16 @@ export function DispatchMonitorPanel() {
           </p>
         </div>
         <div className="rounded-lg bg-[#0c172b] p-3">
-          <p className="text-[11px] font-black uppercase text-slate-400">Assigned / sent</p>
+          <p className="text-[11px] font-black uppercase text-slate-400">Review / sent</p>
           <p className="mt-1 text-sm font-semibold text-white">
-            {state?.lastResult ? `${state.lastResult.assigned} assigned · ${state.lastResult.sent} sent` : "—"}
+            {state?.lastResult
+              ? `${state.lastResult.pendingReview ?? 0} to review · ${state.lastResult.sent} sent`
+              : "—"}
           </p>
         </div>
-        <label className="flex items-center gap-2 rounded-lg bg-[#0c172b] p-3 text-sm font-semibold text-slate-100">
-          <input
-            checked={state?.autoSend !== false}
-            onChange={(event) => saveSettings(event.target.checked)}
-            type="checkbox"
-          />
-          Email the branded work order to the contractor
-        </label>
+        <div className="rounded-lg bg-[#0c172b] p-3 text-sm font-semibold text-slate-100">
+          Emails and crew assignments wait until someone reviews them in Job Intake.
+        </div>
       </div>
 
       {state?.lastError ? <p className="text-sm font-semibold text-red-300">{state.lastError}</p> : null}

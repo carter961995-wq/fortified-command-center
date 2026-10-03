@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { invoiceStatusFromBalance, statusTimestampUpdates, type PlainRow } from "./business";
 import { moduleMap, type ModuleDefinition, type ModuleField } from "./schema";
+import { parsePositiveMoney } from "./money.ts";
+import { recordAdjustment, recordPayment, syncInvoiceTotals as syncStoredInvoiceTotals } from "./payments.ts";
+import {
+  consumeWorkOrderApproval,
+  saveWorkOrderApproval,
+  workOrderDispatchFingerprint,
+} from "./integrations/dispatch-approval.ts";
 import { createSupabaseServerClient } from "./supabase/server";
 
 async function requireSupabaseUser() {
@@ -119,20 +126,7 @@ export async function addJobCostAction(workOrderId: string, formData: FormData) 
 
 async function syncInvoiceTotals(invoiceId: string) {
   const { supabase } = await requireSupabaseUser();
-  const [{ data: invoice }, { data: lineItems }, { data: payments }] = await Promise.all([
-    supabase.from("invoices").select("total_amount, tax_amount, due_date, paid_at").eq("id", invoiceId).maybeSingle(),
-    supabase.from("invoice_line_items").select("total").eq("invoice_id", invoiceId),
-    supabase.from("payments").select("amount").eq("invoice_id", invoiceId)
-  ]);
-  const subtotal = ((lineItems ?? []) as PlainRow[]).reduce((sum, row) => sum + Number(row.total ?? 0), 0);
-  const tax = Number((invoice as PlainRow | null)?.tax_amount ?? 0);
-  const total = subtotal > 0 ? subtotal + tax : Number((invoice as PlainRow | null)?.total_amount ?? 0);
-  const amountPaid = ((payments ?? []) as PlainRow[]).reduce((sum, row) => sum + Number(row.amount ?? 0), 0);
-  const status = invoiceStatusFromBalance(total, amountPaid, (invoice as PlainRow | null)?.due_date ? String((invoice as PlainRow).due_date) : null);
-  const balanceDue = Math.max(total - amountPaid, 0);
-  const updates: PlainRow = { subtotal, total_amount: total, amount_paid: amountPaid, balance_due: balanceDue, status };
-  if (status === "paid" && !(invoice as PlainRow | null)?.paid_at) updates.paid_at = new Date().toISOString();
-  await supabase.from("invoices").update(updates).eq("id", invoiceId);
+  await syncStoredInvoiceTotals(supabase, invoiceId);
 }
 
 export async function addInvoiceLineItemAction(invoiceId: string, formData: FormData) {
@@ -153,19 +147,18 @@ export async function addInvoiceLineItemAction(invoiceId: string, formData: Form
 }
 
 export async function addPaymentAction(invoiceId: string, customerId: string, formData: FormData) {
+  const parsed = parsePositiveMoney(formData.get("amount"));
+  if (!parsed.ok) throw new Error(parsed.error);
   const { supabase } = await requireSupabaseUser();
-  const payload = {
-    invoice_id: invoiceId,
-    customer_id: customerId,
-    amount: Number(formData.get("amount") ?? 0),
-    payment_date: String(formData.get("payment_date") ?? new Date().toISOString().slice(0, 10)),
-    payment_method: String(formData.get("payment_method") ?? "other"),
-    reference_number: String(formData.get("reference_number") ?? "") || null,
-    notes: String(formData.get("notes") ?? "") || null
-  };
-  const { error } = await supabase.from("payments").insert(payload);
-  if (error) throw new Error(error.message);
-  await syncInvoiceTotals(invoiceId);
+  const result = await recordPayment(supabase, invoiceId, customerId, formData);
+  if (!result.ok) throw new Error(result.error);
+  revalidatePath(`/invoices/${invoiceId}`);
+}
+
+export async function addInvoiceAdjustmentAction(invoiceId: string, customerId: string, formData: FormData) {
+  const { supabase } = await requireSupabaseUser();
+  const result = await recordAdjustment(supabase, invoiceId, customerId, formData);
+  if (!result.ok) throw new Error(result.error);
   revalidatePath(`/invoices/${invoiceId}`);
 }
 
@@ -230,16 +223,61 @@ export async function createWorkOrderFromVisitAction(visitId: string, contractId
   redirect(`/work-orders/${String((workOrder as PlainRow).id)}`);
 }
 
-export async function assignWorkOrderSubcontractor(workOrderId: string, subcontractorId: string) {
+export async function approveWorkOrderDispatch(workOrderId: string, subcontractorId: string) {
   const { supabase } = await requireSupabaseUser();
-  const { data: workOrder, error: loadError } = await supabase
-    .from("work_orders")
-    .select("id, status")
-    .eq("id", workOrderId)
-    .maybeSingle();
-  if (loadError || !workOrder) return { error: loadError?.message ?? "Work order not found." };
+  const [{ data: workOrder, error: loadError }, photos, documents] = await Promise.all([
+    supabase.from("work_orders").select("id, title, scope_summary, scheduled_date, not_to_exceed_amount, status").eq("id", workOrderId).maybeSingle(),
+    supabase.from("work_order_photos").select("id").eq("work_order_id", workOrderId),
+    supabase.from("work_order_documents").select("id").eq("work_order_id", workOrderId),
+  ]);
+  if (loadError || !workOrder) return { error: loadError?.message ?? "Work order not found.", approvalId: null };
+  const row = workOrder as PlainRow;
+  const attachmentIds = [...((photos.data ?? []) as PlainRow[]), ...((documents.data ?? []) as PlainRow[])].map((item) => String(item.id));
+  const approval = await saveWorkOrderApproval({
+    workOrderId,
+    subcontractorId,
+    fingerprint: workOrderDispatchFingerprint({
+      workOrderId,
+      title: String(row.title ?? ""),
+      scope: String(row.scope_summary ?? ""),
+      subcontractorId,
+      scheduledDate: row.scheduled_date ? String(row.scheduled_date) : null,
+      notToExceed: row.not_to_exceed_amount,
+      attachmentIds,
+    }),
+  });
+  return { error: null, approvalId: approval.id };
+}
 
-  const currentStatus = String((workOrder as PlainRow).status ?? "New");
+export async function assignWorkOrderSubcontractor(workOrderId: string, subcontractorId: string, approvalId?: string) {
+  if (!approvalId) return { error: "Logan must approve this dispatch before it is sent." };
+  const { supabase } = await requireSupabaseUser();
+  const [{ data: workOrder, error: loadError }, photos, documents] = await Promise.all([
+    supabase.from("work_orders").select("id, title, scope_summary, scheduled_date, not_to_exceed_amount, status").eq("id", workOrderId).maybeSingle(),
+    supabase.from("work_order_photos").select("id").eq("work_order_id", workOrderId),
+    supabase.from("work_order_documents").select("id").eq("work_order_id", workOrderId),
+  ]);
+  if (loadError || !workOrder) return { error: loadError?.message ?? "Work order not found." };
+  const row = workOrder as PlainRow;
+  const attachmentIds = [...((photos.data ?? []) as PlainRow[]), ...((documents.data ?? []) as PlainRow[])].map((item) => String(item.id));
+  try {
+    await consumeWorkOrderApproval(
+      approvalId,
+      workOrderDispatchFingerprint({
+        workOrderId,
+        title: String(row.title ?? ""),
+        scope: String(row.scope_summary ?? ""),
+        subcontractorId,
+        scheduledDate: row.scheduled_date ? String(row.scheduled_date) : null,
+        notToExceed: row.not_to_exceed_amount,
+        attachmentIds,
+      })
+    );
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Logan must approve this dispatch before it is sent." };
+  }
+
+  const currentStatus = String(row.status ?? "New");
   const nextStatus = ["New", "Needs Site Info", "Waiting on Sub Quote", "Quote Needed"].includes(currentStatus)
     ? "Scheduled"
     : currentStatus;

@@ -589,6 +589,21 @@ export async function dispatchWorkOrder(supabase: SupabaseClient, input: Record<
 
   if (!subcontractor) throw new Error("No matching subcontractor found for this job.");
 
+  const approvalId = cleanText(input.approvalId);
+  if (!approvalId) throw new Error("Logan must approve this dispatch before it is sent.");
+  const { consumeWorkOrderApproval, workOrderDispatchFingerprint } = await import("./dispatch-approval.ts");
+  await consumeWorkOrderApproval(
+    approvalId,
+    workOrderDispatchFingerprint({
+      workOrderId: String(workOrder.id),
+      title: String(workOrder.title ?? ""),
+      scope: String(workOrder.scope_summary ?? ""),
+      subcontractorId: String(subcontractor.id),
+      scheduledDate: asDate(input.scheduledDate) || asDate(workOrder.scheduled_date),
+      notToExceed: workOrder.not_to_exceed_amount ?? workOrder.nte_amount,
+    })
+  );
+
   const scheduledDate = asDate(input.scheduledDate) || asDate(workOrder.scheduled_date);
   const status = normalizeWorkOrderStatus(input.status ?? "Scheduled");
   const { error } = await supabase

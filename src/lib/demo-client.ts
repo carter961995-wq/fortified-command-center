@@ -725,6 +725,8 @@ class DemoQuery implements PromiseLike<any> {
   private filters: Filter[] = [];
   private sorts: Sort[] = [];
   private rowLimit: number | null = null;
+  private rangeFrom: number | null = null;
+  private rangeTo: number | null = null;
   private resultMode: "many" | "single" | "maybeSingle" = "many";
   private selectOptions: { count?: "exact"; head?: boolean } = {};
   private mutationValue: any;
@@ -792,6 +794,16 @@ class DemoQuery implements PromiseLike<any> {
     return this;
   }
 
+  is(column: string, value: any) {
+    this.filters.push({ column, op: "is", value });
+    return this;
+  }
+
+  neq(column: string, value: any) {
+    this.filters.push({ column, op: "neq", value });
+    return this;
+  }
+
   ilike(column: string, value: string) {
     this.filters.push({ column, op: "ilike", value });
     return this;
@@ -814,6 +826,12 @@ class DemoQuery implements PromiseLike<any> {
 
   limit(value: number) {
     this.rowLimit = value;
+    return this;
+  }
+
+  range(from: number, to: number) {
+    this.rangeFrom = from;
+    this.rangeTo = to;
     return this;
   }
 
@@ -850,7 +868,11 @@ class DemoQuery implements PromiseLike<any> {
       rows = rows.sort((a, b) => compareValues(a[sort.column], b[sort.column], sort.ascending));
     }
 
-    if (this.rowLimit !== null) rows = rows.slice(0, this.rowLimit);
+    if (this.rangeFrom !== null && this.rangeTo !== null) {
+      rows = rows.slice(this.rangeFrom, this.rangeTo + 1);
+    } else if (this.rowLimit !== null) {
+      rows = rows.slice(0, this.rowLimit);
+    }
     rows = rows.map((row) => attachRelations(this.table, row));
 
     if (this.selectOptions.head) {
@@ -1021,8 +1043,13 @@ function matchesFilter(row: DemoRow, filter: Filter) {
       return value !== filter.value;
     case "not.in":
       return !parseInList(filter.value).includes(value);
+    case "is":
+      if (filter.value === null) return value === null || value === undefined || value === "";
+      return value === filter.value;
+    case "neq":
+      return value !== filter.value;
     case "not.is":
-      return filter.value === null ? value !== null && value !== undefined : value !== filter.value;
+      return filter.value === null ? value !== null && value !== undefined && value !== "" : value !== filter.value;
     default:
       return true;
   }

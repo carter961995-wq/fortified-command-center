@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Loader2, MapPin, Plus, Radar, Search, Satellite } from "lucide-react";
-import { assignWorkOrderSubcontractor } from "../lib/actions";
+import { approveWorkOrderDispatch, assignWorkOrderSubcontractor } from "../lib/actions";
 import type { SubcontractorMapPin, WorkOrderMapPin } from "../lib/subcontractor-pins";
 
 const LeafletMap = dynamic(() => import("./subcontractor-map-leaflet"), {
@@ -31,6 +31,7 @@ export function SubcontractorMapPanel({
   const [satellite, setSatellite] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [reviewJobId, setReviewJobId] = useState<string | null>(null);
 
   const visibleSubs = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -49,15 +50,25 @@ export function SubcontractorMapPanel({
     [workOrders]
   );
   const unassignedJobs = useMemo(() => openJobs.filter((job) => !job.subcontractorId), [openJobs]);
+  const reviewJob = unassignedJobs.find((job) => job.id === reviewJobId) ?? null;
 
-  async function dispatchJob(workOrderId: string) {
-    if (!selected) return;
+  async function confirmDispatch() {
+    if (!selected || !reviewJob) return;
+    const workOrderId = reviewJob.id;
     setDispatchingId(workOrderId);
     setDispatchMessage(null);
     try {
-      const result = await assignWorkOrderSubcontractor(workOrderId, selected.id);
-      setDispatchMessage(result.error ?? `Dispatched ${selected.companyName} to the job.`);
-      if (!result.error) router.refresh();
+      const approved = await approveWorkOrderDispatch(workOrderId, selected.id);
+      if (approved.error || !approved.approvalId) {
+        setDispatchMessage(approved.error ?? "Logan must approve this dispatch before it is sent.");
+        return;
+      }
+      const result = await assignWorkOrderSubcontractor(workOrderId, selected.id, approved.approvalId);
+      setDispatchMessage(result.error ?? `Dispatched ${selected.companyName} after review.`);
+      if (!result.error) {
+        setReviewJobId(null);
+        router.refresh();
+      }
     } catch (error) {
       setDispatchMessage(error instanceof Error ? error.message : "Dispatch failed.");
     } finally {
@@ -66,7 +77,7 @@ export function SubcontractorMapPanel({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
       <aside className="overflow-hidden rounded-xl border border-[#1f304d] bg-[#111f38]">
         <div className="border-b border-[#1f304d] p-4">
           <label className="flex items-center gap-2 rounded-lg border border-[#223758] bg-[#0c172b] px-3 py-2 text-slate-300">
@@ -167,9 +178,34 @@ export function SubcontractorMapPanel({
                   ) : null}
                 </div>
               </div>
-              <div className="min-w-[240px] rounded-xl border border-[#223758] bg-[#0c172b] p-3">
-                <p className="text-xs font-black uppercase tracking-wide text-slate-400">Dispatch unassigned job</p>
-                {unassignedJobs.length === 0 ? (
+              <div className="w-full min-w-0 max-w-full rounded-xl border border-[#223758] bg-[#0c172b] p-3 lg:max-w-xs">
+                <p className="text-xs font-black uppercase tracking-wide text-slate-400">Review dispatch</p>
+                {reviewJob ? (
+                  <div className="mt-2 grid gap-2">
+                    <p className="text-sm font-bold text-white">{reviewJob.title}</p>
+                    <p className="text-xs text-slate-400">
+                      {reviewJob.city}, {reviewJob.state} · {reviewJob.status}
+                    </p>
+                    <p className="text-xs text-slate-300">
+                      Assign this job to {selected.companyName} after you confirm the crew and the site.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={dispatchingId === reviewJob.id}
+                      onClick={() => void confirmDispatch()}
+                      className="rounded-lg bg-orange-500 px-3 py-2 text-left text-xs font-black text-white hover:bg-orange-400"
+                    >
+                      {dispatchingId === reviewJob.id ? "Assigning..." : "Approve and assign"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewJobId(null)}
+                      className="rounded-lg border border-slate-700 px-3 py-2 text-left text-xs font-bold text-slate-200"
+                    >
+                      Back to jobs
+                    </button>
+                  </div>
+                ) : unassignedJobs.length === 0 ? (
                   <p className="mt-2 text-sm text-slate-400">No unassigned open jobs right now.</p>
                 ) : (
                   <div className="mt-2 grid gap-2">
@@ -178,7 +214,10 @@ export function SubcontractorMapPanel({
                         key={job.id}
                         type="button"
                         disabled={dispatchingId === job.id}
-                        onClick={() => dispatchJob(job.id)}
+                        onClick={() => {
+                          setReviewJobId(job.id);
+                          setDispatchMessage(null);
+                        }}
                         className="rounded-lg border border-slate-700 px-3 py-2 text-left text-xs text-slate-200 hover:border-orange-400"
                       >
                         <span className="block font-bold text-white">{job.title}</span>

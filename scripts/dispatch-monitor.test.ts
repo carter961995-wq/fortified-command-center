@@ -5,9 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { buildBrandedWorkOrderText } from "../lib/integrations/branded-work-order.ts";
 import { matchContractor, type ContractorCandidate, type DispatchRoute } from "../lib/integrations/contractor-match.ts";
-import { dispatchIncomingWorkOrders } from "../lib/integrations/dispatch-monitor.ts";
+import { stampLoganApproval } from "../lib/integrations/dispatch-approval.ts";
+import { dispatchIncomingWorkOrders, releaseReviewedDispatch } from "../lib/integrations/dispatch-monitor.ts";
+import { updateJobIntakeRecord, upsertJobIntakeFromSource } from "../lib/integrations/job-intake.ts";
+import { redactSubcontractorDne, subcontractorDneAmount } from "../lib/integrations/subcontractor-dne.ts";
 import { collectFilesFromText, collectGmailFiles } from "../lib/integrations/intake-files.ts";
-import { upsertJobIntakeFromSource } from "../lib/integrations/job-intake.ts";
 import { resetLocalDataStoreForTests } from "../src/lib/demo-client.ts";
 
 const pelican: ContractorCandidate = {
@@ -117,6 +119,7 @@ test("branded work order carries Fortified identity, site, and contractor", () =
         workOrderNumber: "MHD-10418",
         description: "Gate operator reverse fault",
         dneAmount: 1200,
+        jobDetails: "Operator reverses mid-cycle. DNE: $1,200.00. Photo attached.",
       },
       category: "work_order",
       notes: "",
@@ -137,7 +140,17 @@ test("branded work order carries Fortified identity, site, and contractor", () =
   assert.match(text, /Pelican Gate Services/);
   assert.match(text, /MHD-10418/);
   assert.match(text, /dock-before.jpg/);
-  assert.match(text, /\$1,200\.00/);
+  assert.match(text, /Not to exceed: \$600\.00/);
+  assert.match(text, /DNE: \$600\.00/);
+  assert.doesNotMatch(text, /1,200/);
+  assert.doesNotMatch(text, /\$1200/);
+});
+
+test("subcontractor not-to-exceed is half of the customer DNE", () => {
+  assert.equal(subcontractorDneAmount(2000), 1000);
+  assert.equal(subcontractorDneAmount(850), 425);
+  assert.equal(redactSubcontractorDne("We have a DNE of $2,000.00 on this call.", 2000), "We have a DNE of $1,000.00 on this call.");
+  assert.equal(redactSubcontractorDne("Scope stays the same and the gate is 20 feet.", 2000), "Scope stays the same and the gate is 20 feet.");
 });
 
 test("a new mHelpDesk assignment becomes a branded work order for the location contractor", async () => {
@@ -196,40 +209,75 @@ Trade: Fence`,
           active: true,
         },
       ],
-      autoSend: true,
+    });
+
+    assert.equal(sent.length, 0);
+    assert.equal(result.sent, 0);
+    assert.equal(result.pendingReview, 1);
+    assert.equal(result.needsContractor, 1);
+
+    const store = JSON.parse(await readFile(path.join(dir, "job-intake.json"), "utf8")) as {
+      records: Array<{
+        id: string;
+        parsed: { workOrderNumber?: string; dneAmount?: number | null };
+        dispatch?: { status: string; contractorName?: string; fortifiedWorkOrderNumber?: string; documentPath?: string };
+        emailDraft?: { to: string; subject: string; body: string; status: string; reviewedAt?: string; updatedAt: string };
+        files?: unknown[];
+      }>;
+    };
+    const nola = store.records.find((record) => record.parsed.workOrderNumber === "MHD-10418");
+    const dallas = store.records.find((record) => record.parsed.workOrderNumber === "WO-45821");
+    assert.equal(nola?.dispatch?.status, "pending_review");
+    assert.equal(nola?.emailDraft?.status, "draft");
+    assert.equal(nola?.parsed.dneAmount, 1200);
+    assert.match(nola?.emailDraft?.body || "", /Not to exceed: \$600\.00/);
+    assert.doesNotMatch(nola?.emailDraft?.body || "", /1,200|\$1200/);
+    assert.equal(nola?.dispatch?.contractorName, "Pelican Gate Services");
+    assert.match(nola?.dispatch?.fortifiedWorkOrderNumber || "", /^FFW-/);
+    assert.ok((nola?.files?.length ?? 0) >= 1);
+    assert.equal(dallas?.dispatch?.status, "needs_contractor");
+
+    await assert.rejects(
+      () => releaseReviewedDispatch(nola?.id || "", { sendEmail: async () => ({ id: "should-not-send" }) }),
+      /Logan must approve/
+    );
+
+    const current = JSON.parse(await readFile(path.join(dir, "job-intake.json"), "utf8")) as {
+      records: Array<{ id: string; emailDraft?: { to: string; subject: string; body: string; status: "draft"; updatedAt: string }; files?: []; parsed: { workOrderNumber?: string }; rawText: string; status: "new"; source: "mhelpdesk"; sourceRef: string; receivedAt: string; category: "work_order"; notes: string; photoUrls: string[]; createdAt: string; updatedAt: string }>;
+    };
+    const fresh = current.records.find((record) => record.id === nola?.id);
+    if (!fresh?.emailDraft) throw new Error("missing draft");
+    await updateJobIntakeRecord(nola?.id || "", {
+      emailDraft: stampLoganApproval(fresh as never, fresh.emailDraft),
+    });
+
+    const released = await releaseReviewedDispatch(nola?.id || "", {
       sendEmail: async (input) => {
         sent.push(input.to);
         assert.match(input.subject, /FFW-/);
         assert.match(input.body, /FORTIFIED FENCE & WELD/);
+        assert.match(input.body, /\$600\.00/);
+        assert.doesNotMatch(input.body, /1,200|\$1200/);
         assert.ok(input.pdfPath);
         const pdf = await readFile(input.pdfPath);
         assert.ok(pdf.subarray(0, 4).toString() === "%PDF");
+        assert.equal(input.files.some((file) => file.name.endsWith(".pdf")), false);
         return { id: "sent-1" };
       },
     });
 
     assert.equal(sent.length, 1);
     assert.equal(sent[0], "dispatch@pelicangate.test");
-    assert.equal(result.sent, 1);
-    assert.equal(result.needsContractor, 1);
-
-    const store = JSON.parse(await readFile(path.join(dir, "job-intake.json"), "utf8")) as {
-      records: Array<{ parsed: { workOrderNumber?: string }; dispatch?: { status: string; contractorName?: string; fortifiedWorkOrderNumber?: string }; files?: unknown[] }>;
-    };
-    const nola = store.records.find((record) => record.parsed.workOrderNumber === "MHD-10418");
-    const dallas = store.records.find((record) => record.parsed.workOrderNumber === "WO-45821");
-    assert.equal(nola?.dispatch?.status, "sent");
-    assert.equal(nola?.dispatch?.contractorName, "Pelican Gate Services");
-    assert.match(nola?.dispatch?.fortifiedWorkOrderNumber || "", /^FFW-/);
-    assert.ok((nola?.files?.length ?? 0) >= 1);
-    assert.equal(dallas?.dispatch?.status, "needs_contractor");
+    assert.equal(released.record.dispatch?.status, "sent");
 
     const snapshot = JSON.parse(await readFile(path.join(dir, "local-records.json"), "utf8")) as {
-      work_orders: Array<{ work_order_number: string; subcontractor_id: string; title: string }>;
+      work_orders: Array<{ work_order_number: string; subcontractor_id: string; title: string; not_to_exceed_amount?: number; internal_notes?: string }>;
       work_order_photos: Array<{ caption?: string }>;
     };
     assert.equal(snapshot.work_orders.length, 1);
     assert.equal(snapshot.work_orders[0].subcontractor_id, pelican.id);
+    assert.equal(snapshot.work_orders[0].not_to_exceed_amount, 1200);
+    assert.match(snapshot.work_orders[0].internal_notes || "", /Subcontractor NTE \$600\.00/);
     assert.match(snapshot.work_orders[0].work_order_number, /^FFW-/);
     assert.equal(snapshot.work_order_photos[0].caption, "dock-before.jpg");
   } finally {

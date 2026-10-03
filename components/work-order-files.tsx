@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayValue, type PlainRow } from "../lib/business";
-import { createSupabaseBrowserClient } from "../lib/supabase/client";
 import { Badge, Card } from "./ui";
 
 const photoTypes = ["before", "during", "after", "receipt", "damage", "other"];
@@ -44,17 +43,14 @@ export function WorkOrderFiles({ workOrderId, photos, documents }: { workOrderId
     setMessage("");
     startTransition(async () => {
       try {
-        const supabase = createSupabaseBrowserClient();
-        const bucket = kind === "photo" ? "work-order-photos" : "work-order-documents";
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-        const path = `${workOrderId}/${crypto.randomUUID()}-${safeName}`;
-        const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: false });
-        if (error) throw error;
-        const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+        const body = new FormData();
+        body.set("kind", kind);
+        body.set("type", fileType);
+        body.set("caption", caption);
+        body.set("file", file);
         const response = await fetch(`/api/work-orders/${workOrderId}/files`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kind, url: data.publicUrl, type: fileType, caption, filename: file.name })
+          body,
         });
         if (!response.ok) throw new Error(await response.text());
         setCaption("");
@@ -72,7 +68,7 @@ export function WorkOrderFiles({ workOrderId, photos, documents }: { workOrderId
     <div className="grid gap-6 xl:grid-cols-2">
       <Card className="xl:col-span-2">
         <h2 className="text-lg font-black">Photos and documents</h2>
-        <p className="mt-1 text-sm text-stone-600">Files upload to Supabase Storage buckets and are linked to this work order for field photos, receipts, quotes, invoices, completion forms, and contracts.</p>
+        <p className="mt-1 text-sm text-stone-600">JPEG, PNG, GIF, WebP, and PDF files up to 15 MB are stored with this work order and stay available after a restart.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-5">
           <select value={kind} onChange={(event) => { const next = event.target.value as "photo" | "document"; setKind(next); setFileType(next === "photo" ? "before" : "quote"); }}><option value="photo">Photo</option><option value="document">Document</option></select>
           <select value={fileType} onChange={(event) => setFileType(event.target.value)}>{typeOptions.map((type) => <option key={type}>{type}</option>)}</select>

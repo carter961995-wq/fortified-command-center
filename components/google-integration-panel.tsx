@@ -37,7 +37,10 @@ export function GoogleIntegrationPanel({ message }: { message?: string }) {
   }
 
   useEffect(() => {
-    refreshStatus();
+    const timer = window.setTimeout(() => {
+      void refreshStatus();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function syncWorkspace() {

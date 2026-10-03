@@ -51,7 +51,10 @@ export function GptBridgePanel() {
   }
 
   useEffect(() => {
-    load();
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function copy(label: string, value?: string | null) {

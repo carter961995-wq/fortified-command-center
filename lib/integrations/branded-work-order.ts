@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import type { IntakeFile } from "./intake-files.ts";
+import { isImageFile, type IntakeFile } from "./intake-files.ts";
 import type { JobIntakeRecord } from "./job-intake.ts";
+import { formatMoney, redactSubcontractorDne, subcontractorDneAmount } from "./subcontractor-dne.ts";
 
 export type BrandedAssignment = {
   fortifiedWorkOrderNumber: string;
@@ -12,11 +13,6 @@ export type BrandedAssignment = {
   reason: string;
 };
 
-function money(value?: number | null) {
-  if (value == null || Number.isNaN(Number(value))) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value));
-}
-
 function siteLine(record: JobIntakeRecord) {
   const parsed = record.parsed;
   return [parsed.address, parsed.city, parsed.state, parsed.zip].filter(Boolean).join(", ") || "—";
@@ -24,9 +20,17 @@ function siteLine(record: JobIntakeRecord) {
 
 export function buildBrandedWorkOrderText(record: JobIntakeRecord, assignment: BrandedAssignment, files: IntakeFile[] = []) {
   const parsed = record.parsed;
+  const fullDne = parsed.dneAmount;
   const fileLines = files.length
-    ? files.map((file) => `- ${file.name}${file.sourceUrl ? ` (${file.sourceUrl})` : ""}`).join("\n")
+    ? files
+        .map((file) => {
+          if (!isImageFile(file)) return `- ${file.name} (kept on the Fortified copy)`;
+          return `- ${file.name}${file.sourceUrl ? ` (${file.sourceUrl})` : ""}`;
+        })
+        .join("\n")
     : "- None attached";
+  const description = redactSubcontractorDne(parsed.description || record.subject || "Work order", fullDne);
+  const details = parsed.jobDetails ? redactSubcontractorDne(parsed.jobDetails, fullDne) : "";
 
   return [
     "FORTIFIED FENCE & WELD",
@@ -50,11 +54,11 @@ export function buildBrandedWorkOrderText(record: JobIntakeRecord, assignment: B
     siteLine(record),
     "",
     "SCOPE",
-    parsed.description || record.subject || "Work order",
-    parsed.jobDetails || "",
+    description,
+    details,
     `Trade: ${parsed.tradeType || "—"}`,
     `Priority: ${parsed.priority || "—"}`,
-    `Not to exceed: ${money(parsed.dneAmount)}`,
+    `Not to exceed: ${formatMoney(subcontractorDneAmount(fullDne))}`,
     `Timeframe: ${parsed.timeframe || "—"}`,
     `Due: ${parsed.dueDate || "—"}`,
     "",
