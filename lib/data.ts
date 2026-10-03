@@ -265,7 +265,7 @@ export async function fetchDashboardMetrics() {
       exactCount(supabase, "subcontractors", (query) => query.eq("status", "active")),
       exactCount(supabase, "maintenance_contracts", (query) => query.eq("status", "active")),
       supabase.from("work_orders").select("id, title, work_order_number, status, created_at").order("created_at", { ascending: false }).order("id", { ascending: false }).range(0, 7),
-      supabase.from("work_orders").select("id, title, scheduled_date, status").gte("scheduled_date", today).not("status", "in", CLOSED_JOBS).order("scheduled_date", { ascending: true }).order("id", { ascending: true }).range(0, 7),
+      supabase.from("work_orders").select("id, title, scheduled_date, status").eq("scheduled_date", today).not("status", "in", CLOSED_JOBS).order("scheduled_date", { ascending: true }).order("id", { ascending: true }).range(0, 7),
       supabase.from("invoices").select("id, invoice_number, balance_due, due_date, status").gt("balance_due", 0).order("due_date", { ascending: true }).order("id", { ascending: true }).range(0, 7),
     ]);
     const profit = calculateProfit(revenueThisMonth, costsThisMonth);
