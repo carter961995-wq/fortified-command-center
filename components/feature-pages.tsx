@@ -115,7 +115,7 @@ async function SubcontractorMapPage() {
     <div className="mx-auto grid max-w-7xl gap-6">
       <ToolHeader
         title="Subcontractor Map"
-        description="Real street map of crew coverage and open job sites. Click a crew to open their card or dispatch an unassigned work order."
+        description="Real street map of crew coverage and open job sites. Click a crew to open their card, then review a dispatch before it is assigned."
         action={
           <Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/subcontractors/new">
             <Plus className="mr-2 inline size-4" />

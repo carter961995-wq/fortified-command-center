@@ -62,12 +62,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     if (body.action === "approve_email") {
       const draft = existing.emailDraft ?? buildDefaultEmailDraft(existing);
+      const reviewedAt = new Date().toISOString();
       const updated = await updateJobIntakeRecord(id, {
         emailDraft: {
           ...draft,
           ...body.emailDraft,
           status: "approved",
-          updatedAt: new Date().toISOString(),
+          reviewedAt,
+          updatedAt: reviewedAt,
         },
       });
       return NextResponse.json({ ok: true, record: updated });
@@ -155,19 +157,22 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       });
     }
 
+    const nextDraft = body.emailDraft
+      ? {
+          ...(existing.emailDraft ?? buildDefaultEmailDraft(existing)),
+          ...body.emailDraft,
+          updatedAt: new Date().toISOString(),
+        }
+      : undefined;
+    if (nextDraft?.status === "draft") delete nextDraft.reviewedAt;
+
     const updated = await updateJobIntakeRecord(id, {
       status: body.status,
       notes: body.notes,
       scheduledDate: body.scheduledDate,
       photoUrls: body.photoUrls,
       parsed: body.parsed,
-      emailDraft: body.emailDraft
-        ? {
-            ...(existing.emailDraft ?? buildDefaultEmailDraft(existing)),
-            ...body.emailDraft,
-            updatedAt: new Date().toISOString(),
-          }
-        : undefined,
+      emailDraft: nextDraft,
     });
 
     return NextResponse.json({ ok: true, record: updated });

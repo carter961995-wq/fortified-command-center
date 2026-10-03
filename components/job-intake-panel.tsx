@@ -14,6 +14,7 @@ import {
   Send,
   StickyNote,
 } from "lucide-react";
+import { subcontractorDneAmount } from "../lib/integrations/subcontractor-dne";
 
 type ParsedJobFields = {
   customerName?: string;
@@ -61,7 +62,7 @@ type JobIntakeRecord = {
   photoUrls: string[];
   files?: Array<{ name: string; mimeType?: string; sourceUrl?: string; localPath?: string }>;
   dispatch?: {
-    status: "assigned" | "sent" | "needs_contractor";
+    status: "pending_review" | "assigned" | "sent" | "needs_contractor";
     contractorName?: string;
     contractorEmail?: string;
     reason?: string;
@@ -78,6 +79,7 @@ type JobIntakeRecord = {
     body: string;
     status: "draft" | "approved" | "sent";
     updatedAt: string;
+    reviewedAt?: string;
     sentAt?: string;
   } | null;
   mhelpdeskPush?: {
@@ -289,7 +291,13 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
         return;
       }
       setRecords((current) => current.map((record) => (record.id === body.record.id ? body.record : record)));
-      setMessage("Email sent via Gmail.");
+      setMessage(
+        body.record?.dispatch?.status === "sent"
+          ? "Reviewed dispatch sent. The contractor was told half of our DNE."
+          : body.record?.emailDraft?.status === "sent"
+            ? "Reviewed email sent."
+            : "Dispatch saved after review. The contractor email is still waiting on a deliverable address."
+      );
     });
   }
 
@@ -300,8 +308,9 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
           <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Automation</p>
           <h1 className="mt-1 text-3xl font-black uppercase tracking-tight text-white">Job Intake</h1>
           <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-400">
-            mHelpDesk, Affiliate Connect, and Gmail stay under watch. New assignments are extracted, turned into a
-            Fortified work order, and sent to the contractor for that location.
+            mHelpDesk, Affiliate Connect, and Gmail stay under watch. New assignments are prepared and held for review.
+            Approve the draft, then send. That assigns the crew and emails a Fortified work order. The contractor
+            not-to-exceed is half of the DNE we received.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -414,8 +423,15 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                         <p className="font-black text-white">
                           {record.parsed.workOrderNumber || record.parsed.storeNumber || "New job"}
                         </p>
-                        <span className="rounded-full border border-[#2b4168] px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">
-                          {recordCategory(record).replace(/_/g, " ")}
+                        <span className="flex flex-col items-end gap-1">
+                          <span className="rounded-full border border-[#2b4168] px-2 py-0.5 text-[10px] font-black uppercase text-slate-300">
+                            {recordCategory(record).replace(/_/g, " ")}
+                          </span>
+                          {record.dispatch?.status === "pending_review" ? (
+                            <span className="rounded-full border border-amber-400/50 bg-amber-500/15 px-2 py-0.5 text-[10px] font-black uppercase text-amber-200">
+                              Needs review
+                            </span>
+                          ) : null}
                         </span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-400">
@@ -475,10 +491,23 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                     </p>
                     <p className="mt-1 text-sm text-slate-200">
                       {selected.dispatch.contractorName
-                        ? `${selected.dispatch.status === "sent" ? "Sent to" : "Assigned to"} ${selected.dispatch.contractorName}`
+                        ? `${
+                            selected.dispatch.status === "sent"
+                              ? "Sent to"
+                              : selected.dispatch.status === "pending_review"
+                                ? "Proposed for"
+                                : "Assigned to"
+                          } ${selected.dispatch.contractorName}`
                         : "No contractor matched this location yet."}
                       {selected.dispatch.contractorEmail ? ` · ${selected.dispatch.contractorEmail}` : ""}
                     </p>
+                    {selected.dispatch.status === "pending_review" ? (
+                      <p className="mt-2 text-sm font-semibold text-amber-100">
+                        This package is waiting. Approve the draft, then send, to assign{" "}
+                        {selected.dispatch.contractorName || "the contractor"} and email the Fortified work order.
+                        Their not-to-exceed will be {money(subcontractorDneAmount(selected.parsed.dneAmount))}.
+                      </p>
+                    ) : null}
                     <p className="mt-2 text-sm text-slate-400">{selected.dispatch.error || selected.dispatch.reason}</p>
                     {selected.dispatch.documentPath ? (
                       <a
@@ -503,7 +532,8 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                       .filter(Boolean)
                       .join(", ")}
                   />
-                  <Field label="DNE / NTE" value={money(selected.parsed.dneAmount)} />
+                  <Field label="Our DNE / NTE" value={money(selected.parsed.dneAmount)} />
+                  <Field label="Subcontractor NTE" value={money(subcontractorDneAmount(selected.parsed.dneAmount))} />
                   <Field label="Timeframe" value={selected.parsed.timeframe} />
                   <Field label="Priority" value={selected.parsed.priority} />
                   <Field label="Due date" value={selected.parsed.dueDate} />
@@ -580,9 +610,11 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                 <div className="rounded-xl border border-[#1f304d] bg-[#111f38] p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <h3 className="font-black text-white">Approve-before-send email</h3>
+                      <h3 className="font-black text-white">Review before send</h3>
                       <p className="mt-1 text-xs text-slate-500">
                         Draft status: {selected.emailDraft?.status || "none"}
+                        {selected.emailDraft?.reviewedAt ? " · reviewed" : ""}
+                        . Contractor copy shows {money(subcontractorDneAmount(selected.parsed.dneAmount))} not-to-exceed.
                       </p>
                     </div>
                     <button
@@ -632,7 +664,12 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                     <button
                       className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-200"
                       disabled={isPending}
-                      onClick={() => patchSelected({ action: "approve_email" }, "Email approved. Ready to send.")}
+                      onClick={() =>
+                        patchSelected(
+                          { action: "approve_email" },
+                          "Reviewed and approved. Send when the crew, scope, and subcontractor not-to-exceed look right."
+                        )
+                      }
                       type="button"
                     >
                       <CheckCircle2 className="mr-2 inline size-3.5" />
@@ -640,12 +677,14 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                     </button>
                     <button
                       className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
-                      disabled={isPending || selected.emailDraft?.status !== "approved"}
+                      disabled={isPending || selected.emailDraft?.status !== "approved" || !selected.emailDraft?.reviewedAt}
                       onClick={sendEmail}
                       type="button"
                     >
                       <Send className="mr-2 inline size-3.5" />
-                      Send approved email
+                      {selected.dispatch?.status === "pending_review" || selected.dispatch?.status === "assigned"
+                        ? "Send approved dispatch"
+                        : "Send approved email"}
                     </button>
                   </div>
                 </div>

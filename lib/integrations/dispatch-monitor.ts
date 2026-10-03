@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDemoMode } from "../env.ts";
-import { buildBrandedWorkOrderText, brandedWorkOrderSubject, writeBrandedWorkOrderPdf } from "./branded-work-order.ts";
+import { brandedWorkOrderSubject, writeBrandedWorkOrderPdf } from "./branded-work-order.ts";
 import {
   matchContractor,
   toContractorCandidate,
@@ -14,12 +14,16 @@ import {
 export type { ContractorCandidate, DispatchRoute } from "./contractor-match.ts";
 import { isImageFile, mergeIntakeFiles, type IntakeFile } from "./intake-files.ts";
 import {
+  buildDefaultEmailDraft,
+  getJobIntakeRecord,
   loadJobIntakeStore,
   updateJobIntakeRecord,
   intakeToWorkOrderDraft,
   type JobDispatch,
+  type JobEmailDraft,
   type JobIntakeRecord,
 } from "./job-intake.ts";
+import { formatMoney, redactSubcontractorDne, subcontractorDneAmount } from "./subcontractor-dne.ts";
 
 export type { JobDispatch };
 export type DispatchStatus = JobDispatch["status"];
@@ -40,6 +44,7 @@ export type DispatchCycleResult = {
   checked: number;
   assigned: number;
   sent: number;
+  pendingReview: number;
   needsContractor: number;
   skipped: number;
   message: string;
@@ -83,7 +88,7 @@ async function ensureDir() {
 export function defaultMonitorState(): DispatchMonitorState {
   return {
     enabled: process.env.FORTIFIED_DISPATCH_MONITOR !== "off",
-    autoSend: true,
+    autoSend: false,
     intervalMs: DEFAULT_INTERVAL_MS,
   };
 }
@@ -95,6 +100,7 @@ export async function loadDispatchMonitorState(): Promise<DispatchMonitorState> 
     return {
       ...defaultMonitorState(),
       ...parsed,
+      autoSend: false,
       intervalMs: Math.max(MIN_INTERVAL_MS, Number(parsed.intervalMs) || DEFAULT_INTERVAL_MS),
     };
   } catch {
@@ -206,6 +212,9 @@ async function insertAssignedWorkOrder(record: JobIntakeRecord, dispatch: JobDis
       draft.internal_notes,
       `Fortified WO ${dispatch.fortifiedWorkOrderNumber}`,
       dispatch.contractorName ? `Assigned to ${dispatch.contractorName}` : null,
+      record.parsed.dneAmount != null
+        ? `Customer DNE ${formatMoney(record.parsed.dneAmount)}. Subcontractor NTE ${formatMoney(subcontractorDneAmount(record.parsed.dneAmount))}.`
+        : null,
       dispatch.reason,
     ]
       .filter(Boolean)
@@ -276,6 +285,7 @@ async function attachDownloadedFiles(record: JobIntakeRecord) {
 
 async function sendAssignment(input: {
   to: string;
+  cc?: string;
   subject: string;
   body: string;
   files: IntakeFile[];
@@ -292,7 +302,7 @@ async function sendAssignment(input: {
     });
   }
   for (const file of input.files) {
-    if (!file.localPath) continue;
+    if (!file.localPath || !isImageFile(file)) continue;
     if (attachments.length >= 8) break;
     const { readFile } = await import("node:fs/promises");
     attachments.push({
@@ -303,31 +313,33 @@ async function sendAssignment(input: {
   }
   return sendApprovedGmailDraft({
     to: input.to,
+    cc: input.cc,
     subject: input.subject,
     body: input.body,
     attachments,
   });
 }
 
+type OutboundEmail = {
+  to: string;
+  cc?: string;
+  subject: string;
+  body: string;
+  files: IntakeFile[];
+  pdfPath?: string;
+};
+
 export async function dispatchIncomingWorkOrders(options?: {
   contractors?: ContractorCandidate[];
   routes?: DispatchRoute[];
-  autoSend?: boolean;
-  sendEmail?: (input: {
-    to: string;
-    subject: string;
-    body: string;
-    files: IntakeFile[];
-    pdfPath?: string;
-  }) => Promise<{ id: string }>;
 }): Promise<DispatchCycleResult> {
   const store = await loadJobIntakeStore();
   const routes = options?.routes ?? (await loadDispatchRoutes());
   const contractors = options?.contractors ?? (await loadContractors());
-  const autoSend = options?.autoSend ?? true;
   const items: DispatchCycleResult["items"] = [];
   let assigned = 0;
   let sent = 0;
+  let pendingReview = 0;
   let needsContractor = 0;
   let skipped = 0;
   const numbers = store.records.map((record) => ({ ...record }));
@@ -338,7 +350,7 @@ export async function dispatchIncomingWorkOrders(options?: {
       continue;
     }
     const current = record.dispatch;
-    if (current?.status === "sent") {
+    if (current?.status === "sent" || current?.status === "pending_review") {
       skipped += 1;
       continue;
     }
@@ -400,54 +412,21 @@ export async function dispatchIncomingWorkOrders(options?: {
       dispatch: { status: "assigned", fortifiedWorkOrderNumber, updatedAt: new Date().toISOString() },
     });
 
-    let dispatch: JobDispatch = {
-      status: "assigned",
+    const dispatch: JobDispatch = {
+      status: "pending_review",
       contractorId: match.contractor.id,
       contractorName: match.contractor.companyName,
       contractorEmail: match.contractor.email,
       contractorPhone: match.contractor.phone,
-      reason: match.reason,
+      reason: `${match.reason} Waiting for review before the crew is assigned or emailed.`,
       routeId: match.routeId,
       fortifiedWorkOrderNumber,
       documentPath: written.pdfPath,
       updatedAt: new Date().toISOString(),
     };
-
-    const workOrderId = await insertAssignedWorkOrder({ ...record, files }, dispatch);
-    dispatch.workOrderId = workOrderId ?? current?.workOrderId ?? `local-${record.id}`;
-
-    if (autoSend && deliverableEmail(match.contractor.email)) {
-      try {
-        const sender = options?.sendEmail ?? sendAssignment;
-        await sender({
-          to: match.contractor.email || "",
-          subject: brandedWorkOrderSubject(record, assignment),
-          body: buildBrandedWorkOrderText(record, assignment, files),
-          files,
-          pdfPath: written.pdfPath,
-        });
-        dispatch = { ...dispatch, status: "sent", sentAt: new Date().toISOString(), error: undefined };
-        sent += 1;
-      } catch (error) {
-        dispatch = {
-          ...dispatch,
-          status: "assigned",
-          error: error instanceof Error ? error.message : "Could not email the branded work order.",
-        };
-        assigned += 1;
-      }
-    } else {
-      if (autoSend && match.contractor.email && !deliverableEmail(match.contractor.email)) {
-        dispatch.error = "Contractor email looks like a sample address, so the work order was assigned without sending.";
-      } else if (autoSend) {
-        dispatch.error = "This contractor has no email, so the branded work order was assigned without sending.";
-      }
-      assigned += 1;
-    }
+    pendingReview += 1;
 
     await updateJobIntakeRecord(record.id, {
-      status: "tracked",
-      workOrderId: dispatch.workOrderId,
       files,
       photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name),
       dispatch,
@@ -455,9 +434,8 @@ export async function dispatchIncomingWorkOrders(options?: {
         to: match.contractor.email || "",
         subject: brandedWorkOrderSubject(record, assignment),
         body: written.text,
-        status: dispatch.status === "sent" ? "sent" : "approved",
+        status: "draft",
         updatedAt: new Date().toISOString(),
-        sentAt: dispatch.sentAt,
       },
     });
 
@@ -473,6 +451,7 @@ export async function dispatchIncomingWorkOrders(options?: {
 
   const message = [
     `Checked ${store.records.length} intake records.`,
+    pendingReview ? `Held ${pendingReview} for review.` : null,
     assigned ? `Assigned ${assigned}.` : null,
     sent ? `Sent ${sent} branded work order${sent === 1 ? "" : "s"}.` : null,
     needsContractor ? `${needsContractor} need a contractor for that location.` : null,
@@ -486,11 +465,153 @@ export async function dispatchIncomingWorkOrders(options?: {
     checked: store.records.length,
     assigned,
     sent,
+    pendingReview,
     needsContractor,
     skipped,
     message,
     items,
   };
+}
+
+export async function releaseReviewedDispatch(
+  intakeId: string,
+  options?: {
+    to?: string;
+    cc?: string;
+    subject?: string;
+    body?: string;
+    sendEmail?: (input: OutboundEmail) => Promise<{ id: string }>;
+  }
+) {
+  const record = await getJobIntakeRecord(intakeId);
+  if (!record) throw new Error("Not found.");
+  const current = record.dispatch;
+  if (!current || current.status === "needs_contractor") {
+    throw new Error("This job is not ready to dispatch.");
+  }
+  if (current.status === "sent") {
+    throw new Error("This dispatch was already sent.");
+  }
+
+  const draft: JobEmailDraft = {
+    ...(record.emailDraft ?? buildDefaultEmailDraft(record)),
+    ...(options?.to ? { to: options.to } : {}),
+    ...(options?.cc ? { cc: options.cc } : {}),
+    ...(options?.subject ? { subject: options.subject } : {}),
+    ...(options?.body ? { body: options.body } : {}),
+  };
+  if (draft.status !== "approved" || !draft.reviewedAt) {
+    throw new Error("Review and approve the dispatch before it is sent.");
+  }
+
+  const to = (draft.to || current.contractorEmail || "").trim();
+  if (!to) throw new Error("Draft is missing a recipient.");
+
+  const files = record.files ?? [];
+  let workOrderId = current.workOrderId || record.workOrderId || undefined;
+  if (!workOrderId || workOrderId.startsWith("local-")) {
+    workOrderId = (await insertAssignedWorkOrder({ ...record, files }, current)) ?? workOrderId ?? `local-${record.id}`;
+  }
+
+  const outboundBody = redactSubcontractorDne(draft.body, record.parsed.dneAmount);
+  let sentAt: string | undefined;
+  let gmailMessageId: string | undefined;
+  let errorMessage: string | undefined;
+  let status: JobDispatch["status"] = "assigned";
+
+  if (deliverableEmail(to)) {
+    const sender = options?.sendEmail ?? sendAssignment;
+    const result = await sender({
+      to,
+      cc: draft.cc,
+      subject: draft.subject,
+      body: outboundBody,
+      files,
+      pdfPath: current.documentPath,
+    });
+    gmailMessageId = result.id;
+    sentAt = new Date().toISOString();
+    status = "sent";
+  } else if (to) {
+    errorMessage = "Contractor email looks like a sample address, so the work order was assigned without sending.";
+  } else {
+    errorMessage = "This contractor has no email, so the branded work order was assigned without sending.";
+  }
+
+  const updated = await updateJobIntakeRecord(record.id, {
+    status: "tracked",
+    workOrderId,
+    dispatch: {
+      ...current,
+      status,
+      workOrderId,
+      sentAt,
+      error: errorMessage,
+      updatedAt: new Date().toISOString(),
+    },
+    emailDraft: {
+      ...draft,
+      to,
+      body: outboundBody,
+      status: status === "sent" ? "sent" : "approved",
+      updatedAt: new Date().toISOString(),
+      sentAt,
+    },
+  });
+
+  return { record: updated, gmailMessageId };
+}
+
+export async function sendReviewedJobIntakeEmail(input: {
+  id: string;
+  to?: string;
+  cc?: string;
+  subject?: string;
+  body?: string;
+  sendEmail?: (input: OutboundEmail) => Promise<{ id: string }>;
+}) {
+  const record = await getJobIntakeRecord(input.id);
+  if (!record) throw new Error("Not found.");
+  const waiting =
+    record.dispatch && (record.dispatch.status === "pending_review" || record.dispatch.status === "assigned");
+  if (waiting) {
+    return releaseReviewedDispatch(input.id, input);
+  }
+
+  const draft: JobEmailDraft = {
+    ...(record.emailDraft ?? buildDefaultEmailDraft(record)),
+    ...(input.to ? { to: input.to } : {}),
+    ...(input.cc ? { cc: input.cc } : {}),
+    ...(input.subject ? { subject: input.subject } : {}),
+    ...(input.body ? { body: input.body } : {}),
+  };
+  if (!draft.to?.trim()) throw new Error("Draft is missing a recipient.");
+  if (draft.status !== "approved" || !draft.reviewedAt) {
+    throw new Error("Approve the email draft first, then send.");
+  }
+
+  const contractorEmail = record.dispatch?.contractorEmail?.trim().toLowerCase();
+  const body =
+    contractorEmail && draft.to.trim().toLowerCase() === contractorEmail
+      ? redactSubcontractorDne(draft.body, record.parsed.dneAmount)
+      : draft.body;
+  const { sendApprovedGmailDraft } = await import("./google.ts");
+  const sent = await sendApprovedGmailDraft({
+    to: draft.to,
+    cc: draft.cc,
+    subject: draft.subject,
+    body,
+  });
+  const updated = await updateJobIntakeRecord(input.id, {
+    emailDraft: {
+      ...draft,
+      body,
+      status: "sent",
+      updatedAt: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+    },
+  });
+  return { record: updated, gmailMessageId: sent.id as string | undefined };
 }
 
 let cyclePromise: Promise<DispatchCycleResult> | null = null;
@@ -519,7 +640,7 @@ async function runCycle(options?: { sync?: boolean }): Promise<DispatchCycleResu
     }
   }
 
-  const result = await dispatchIncomingWorkOrders({ autoSend: state.autoSend });
+  const result = await dispatchIncomingWorkOrders();
   const next: DispatchCycleResult = {
     ...result,
     synced,
@@ -582,7 +703,7 @@ export async function updateDispatchMonitorSettings(patch: { autoSend?: boolean;
   const state = await loadDispatchMonitorState();
   const next = await saveDispatchMonitorState({
     ...state,
-    autoSend: patch.autoSend ?? state.autoSend,
+    autoSend: false,
     intervalMs: patch.intervalMs ? Math.max(MIN_INTERVAL_MS, patch.intervalMs) : state.intervalMs,
   });
   if (next.enabled) {

@@ -48,11 +48,12 @@ export type JobEmailDraft = {
   body: string;
   status: "draft" | "approved" | "sent";
   updatedAt: string;
+  reviewedAt?: string;
   sentAt?: string;
 };
 
 export type JobDispatch = {
-  status: "assigned" | "sent" | "needs_contractor";
+  status: "pending_review" | "assigned" | "sent" | "needs_contractor";
   contractorId?: string;
   contractorName?: string;
   contractorEmail?: string;
