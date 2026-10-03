@@ -132,11 +132,13 @@ export async function renderInvoicePdf(input: InvoicePdfInput) {
   draw("Detailed Work Scope", { size: 12, font: bold, gap: 16 });
   wrapPdfText(input.scope || "-", 95).forEach((line) => draw(line, { color: muted, gap: 12 }));
 
-  ensure(28);
-  page.drawRectangle({ x: 42, y: y - 6, width: 528, height: 20, color: rgb(0.93, 0.9, 0.84) });
-  page.drawText("Description", { x: 52, y, size: 9, font: bold, color: dark });
-  page.drawText("Amount", { x: 490, y, size: 9, font: bold, color: dark });
-  y -= 24;
+  y -= 18;
+  ensure(36);
+  const headerBottom = y - 4;
+  page.drawRectangle({ x: 42, y: headerBottom, width: 528, height: 18, color: rgb(0.93, 0.9, 0.84) });
+  page.drawText("Description", { x: 52, y: headerBottom + 5, size: 9, font: bold, color: dark });
+  page.drawText("Amount", { x: 490, y: headerBottom + 5, size: 9, font: bold, color: dark });
+  y = headerBottom - 16;
 
   const items = input.items.length ? input.items : [{ description: input.title || "Services rendered", total: input.subtotal }];
   for (const item of items) {

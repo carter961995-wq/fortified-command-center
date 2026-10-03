@@ -153,6 +153,12 @@ button, .button-like { font: inherit; }
 .app-sidebar { display: none; width: 240px; flex-shrink: 0; flex-direction: column; }
 .app-content, .app-main, .app-page, .app-mobile-bar { min-width: 0; max-width: 100%; }
 .app-content { flex: 1; overflow-x: clip; }
+.app-page { grid-template-columns: minmax(0, 1fr); }
+.app-page > *,
+.app-main .grid > *,
+.app-main .overflow-x-auto,
+.app-main .overflow-auto { min-width: 0; max-width: 100%; }
+.app-title, .app-copy, .app-kicker { max-width: 100%; overflow-wrap: anywhere; }
 .app-mobile-nav { display: flex; flex-wrap: nowrap; gap: 0.45rem; max-width: 100%; min-width: 0; overflow-x: auto; }
 .app-nav { display: grid; gap: 0.25rem; }
 .app-nav-link { display: flex; align-items: center; gap: 0.7rem; }

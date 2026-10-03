@@ -154,10 +154,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 
 .app-main { min-height: 100vh; min-width: 0; max-width: 100%; padding: 1.25rem; background: #0b1629; overflow-x: clip; }
+.app-main .grid > *,
+.app-main .overflow-x-auto,
+.app-main .overflow-auto { min-width: 0; max-width: 100%; }
 
-.app-page { display: grid; gap: 1.25rem; max-width: 80rem; margin: 0 auto; }
+.app-page { display: grid; gap: 1.25rem; max-width: 80rem; margin: 0 auto; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.app-page > * { min-width: 0; max-width: 100%; }
 
-.app-hero { display: grid; gap: 1rem; }
+.app-hero { display: grid; gap: 1rem; min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
 .app-kicker {
   margin: 0;
   font-size: 0.75rem;
@@ -171,6 +175,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: 2rem;
   font-weight: 900;
   color: #fff;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .app-copy {
   margin: 0.5rem 0 0;
@@ -179,7 +185,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 600;
 }
 
-.app-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.app-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; max-width: 100%; min-width: 0; }
 
 .app-btn {
   display: inline-flex;
@@ -210,10 +216,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 0;
 }
 
-.app-grid { display: grid; gap: 0.75rem; }
-.app-grid-3 { display: grid; gap: 0.75rem; }
-.app-grid-4 { display: grid; gap: 0.75rem; }
-.app-grid-2 { display: grid; gap: 1.25rem; }
+.app-grid { display: grid; gap: 0.75rem; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.app-grid-3 { display: grid; gap: 0.75rem; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.app-grid-4 { display: grid; gap: 0.75rem; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.app-grid-2 { display: grid; gap: 1.25rem; min-width: 0; grid-template-columns: minmax(0, 1fr); }
 
 .app-card,
 .app-source,
