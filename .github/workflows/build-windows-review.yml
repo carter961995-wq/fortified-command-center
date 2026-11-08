@@ -1,0 +1,45 @@
+name: Verify Windows review build
+
+on:
+  push:
+    branches:
+      - "cursor/**"
+  workflow_dispatch:
+
+jobs:
+  verify-windows:
+    runs-on: windows-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_DEMO_MODE: "false"
+    steps:
+      - name: Check out review branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run desktop packaging tests
+        run: npm run test:desktop-pack
+
+      - name: Build Windows desktop app
+        run: npm run desktop:dist:win
+
+      - name: Upload Windows review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortified-command-center-windows-review
+          path: |
+            dist-desktop/*.zip
+            dist-desktop/*.exe
+            dist-desktop/HOW_TO_OPEN_WINDOWS_BUILD.txt
+          if-no-files-found: error
