@@ -387,7 +387,7 @@ export function PremiumDashboard({
       description: "Site info, scope, and subcontractor pricing queues.",
       icon: Target,
       tone: "amber" as const,
-      href: "/work-orders?status=Quote%20Needed",
+      href: "/work-orders?view=pending-estimates",
     },
     {
       label: "Production lane",
@@ -395,7 +395,7 @@ export function PremiumDashboard({
       description: "Approved, scheduled, active, and review-stage work.",
       icon: Wrench,
       tone: "blue" as const,
-      href: "/work-orders?status=Scheduled",
+      href: "/work-orders?view=confirmed-deadlines",
     },
     {
       label: "Invoice launchpad",
@@ -411,7 +411,7 @@ export function PremiumDashboard({
       description: "Open invoices that need collection attention.",
       icon: Banknote,
       tone: metrics.overdueInvoices > 0 ? ("rose" as const) : ("emerald" as const),
-      href: "/invoices",
+      href: "/invoices?view=unpaid",
     },
   ];
   const maxPipelineValue = Math.max(1, ...pipeline.map((stage) => stage.value));
@@ -429,7 +429,7 @@ export function PremiumDashboard({
       label: "Quote blockers",
       value: quoteDeskCount,
       detail: "Items waiting on site facts, quote work, or sub numbers.",
-      href: "/work-orders?status=Quote%20Needed",
+      href: "/work-orders?view=pending-estimates",
       icon: TimerReset,
       tone: "amber" as const,
     },
@@ -445,7 +445,7 @@ export function PremiumDashboard({
       label: "Past due invoices",
       value: metrics.overdueInvoices,
       detail: "Receivables past due with a remaining balance.",
-      href: "/invoices",
+      href: "/invoices?view=unpaid",
       icon: AlertTriangle,
       tone: "rose" as const,
     },
@@ -597,7 +597,7 @@ export function PremiumDashboard({
           helper={`${pluralize(metrics.overdueInvoices, "invoice")} past due`}
           icon={Receipt}
           tone={metrics.overdueInvoices > 0 ? "rose" : "emerald"}
-          href="/invoices"
+          href="/invoices?view=unpaid"
         />
         <MetricTile
           label="Ready to invoice"
@@ -743,7 +743,7 @@ export function PremiumDashboard({
                 <CardDescription>Open receivables that deserve follow-up.</CardDescription>
               </div>
               <Button asChild variant="outline" size="sm" className="border-white/10 bg-white/5 text-white hover:bg-white/10">
-                <Link href="/invoices">
+                <Link href="/invoices?view=unpaid">
                   Open AR
                   <ArrowRight className="size-3.5" />
                 </Link>
