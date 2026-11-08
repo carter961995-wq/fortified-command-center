@@ -1,13 +1,14 @@
 name: Verify Windows review build
 
 on:
-  push:
-    branches:
-      - "cursor/**"
   pull_request:
     branches:
       - main
   workflow_dispatch:
+
+concurrency:
+  group: windows-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify-windows:
@@ -37,12 +38,10 @@ jobs:
       - name: Build Windows desktop app
         run: npm run desktop:dist:win
 
-      - name: Upload Windows review artifacts
+      - name: Upload Windows review ZIP
         uses: actions/upload-artifact@v4
         with:
           name: fortified-command-center-windows-review
-          path: |
-            dist-desktop/*.zip
-            dist-desktop/*.exe
-            dist-desktop/HOW_TO_OPEN_WINDOWS_BUILD.txt
+          path: dist-desktop/Fortified Command Center-0.1.0-win-x64.zip
           if-no-files-found: error
+          compression-level: 0
