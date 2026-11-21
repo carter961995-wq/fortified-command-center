@@ -4,12 +4,15 @@ import {
   getJobIntakeRecord,
   intakeToWorkOrderDraft,
   updateJobIntakeRecord,
+  type ContractorCopy,
   type JobIntakeStatus,
   type ParsedJobFields,
 } from "../../../../../../lib/integrations/job-intake";
 import { stageMhelpdeskPush } from "../../../../../../lib/integrations/mhelpdesk";
 import { acceptJobIntake } from "../../../../../../lib/integrations/accept-intake";
 import { stampLoganApproval } from "../../../../../../lib/integrations/dispatch-approval";
+import { approveContractorDispatch, saveContractorDispatchDraft, shouldDispatch } from "../../../../../../lib/integrations/dispatch-monitor";
+import { requireDispatchEditor, requireDispatchOwner } from "../../../../../../lib/integrations/dispatch-owner";
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
@@ -41,11 +44,24 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         body?: string;
         status?: "draft" | "approved" | "sent";
       };
-      action?: "accept_to_tracker" | "refresh_email_draft" | "stage_mhelpdesk" | "approve_email";
+      contractorCopy?: Partial<ContractorCopy>;
+      reviewedDraftAt?: string;
+      verifiedCustomerDne?: number;
+      action?: "prepare_dispatch" | "accept_to_tracker" | "refresh_email_draft" | "stage_mhelpdesk" | "approve_email";
     };
 
     const existing = await getJobIntakeRecord(id);
     if (!existing) return NextResponse.json({ ok: false, error: "Not found." }, { status: 404 });
+
+    const contractorDispatch = Boolean(existing.dispatch || shouldDispatch(existing) || existing.dispatchHold);
+    if (body.action === "prepare_dispatch") {
+      await requireDispatchEditor();
+      const record = await saveContractorDispatchDraft(id, body.contractorCopy ?? {}, body.verifiedCustomerDne);
+      return NextResponse.json({ ok: true, record });
+    }
+    if (contractorDispatch && (body.action === "refresh_email_draft" || body.emailDraft)) {
+      throw new Error("Edit the selected crew-facing fields and rebuild the contractor draft instead.");
+    }
 
     if (body.action === "refresh_email_draft") {
       const updated = await updateJobIntakeRecord(id, {
@@ -60,6 +76,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
 
     if (body.action === "approve_email") {
+      await requireDispatchOwner();
+      if (contractorDispatch) return NextResponse.json({ ok: true, record: await approveContractorDispatch(id, body.reviewedDraftAt) });
       const draft = {
         ...(existing.emailDraft ?? buildDefaultEmailDraft(existing)),
         ...body.emailDraft,

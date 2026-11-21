@@ -1,9 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { isImageFile, type IntakeFile } from "./intake-files.ts";
-import type { JobIntakeRecord } from "./job-intake.ts";
-import { formatMoney, redactSubcontractorDne, subcontractorDneAmount } from "./subcontractor-dne.ts";
+import type { ContractorCopy, JobIntakeRecord } from "./job-intake.ts";
+import { formatMoney, subcontractorDneAmount } from "./subcontractor-dne.ts";
 
 export type BrandedAssignment = {
   fortifiedWorkOrderNumber: string;
@@ -13,79 +12,48 @@ export type BrandedAssignment = {
   reason: string;
 };
 
-function siteLine(record: JobIntakeRecord) {
-  const parsed = record.parsed;
-  return [parsed.address, parsed.city, parsed.state, parsed.zip].filter(Boolean).join(", ") || "—";
+export function validateContractorCopy(record: JobIntakeRecord, value: Partial<ContractorCopy> | null | undefined): ContractorCopy {
+  if (record.status === "dismissed") throw new Error("Dismissed jobs cannot be dispatched.");
+  if (record.dispatchHold || record.dispatch?.status === "withdrawn") throw new Error(record.dispatchHold || "Dispatch withdrawn.");
+  if (!record.parsed.workOrderNumber || !record.parsed.state || !record.parsed.tradeType) {
+    throw new Error("Verify the work-order number, location and trade before preparing a dispatch.");
+  }
+  const cap = subcontractorDneAmount(record.parsed.dneAmount, value?.subcontractorDne);
+  if (cap == null) throw new Error("Enter a positive subcontractor DNE below the verified customer DNE.");
+  const scope = typeof value?.scope === "string" ? value.scope.trim() : "";
+  const site = typeof value?.site === "string" ? value.site.trim() : "";
+  const schedule = typeof value?.schedule === "string" ? value.schedule.trim() : "";
+  if (!scope || scope.length > 2500 || site.length > 500 || schedule.length > 250) {
+    throw new Error("Enter the crew-facing scope and keep site/schedule details concise.");
+  }
+  // Values are explicitly authored for the crew, never filled from upstream free text.
+  // Block even explicitly retyped financial/internal markers and URLs as a second guardrail.
+  const text = [scope, site, schedule].join("\n");
+  if (/(?:\$\s*\d|\b(?:dne|nte|not\s+to\s+exceed|margin|internal\s+notes?)\b|(?:https?:\/\/|www\.))/i.test(text)) {
+    throw new Error("Remove pricing, internal notes, and links from the crew-facing fields. Use the subcontractor DNE field.");
+  }
+  return { subcontractorDne: cap, scope, site: site || undefined, schedule: schedule || undefined, customerCleared: value?.customerCleared === true };
 }
 
-export function buildBrandedWorkOrderText(record: JobIntakeRecord, assignment: BrandedAssignment, files: IntakeFile[] = []) {
-  const parsed = record.parsed;
-  const fullDne = parsed.dneAmount;
-  const fileLines = files.length
-    ? files
-        .map((file) => {
-          if (!isImageFile(file)) return `- ${file.name} (kept on the Fortified copy)`;
-          return `- ${file.name}${file.sourceUrl ? ` (${file.sourceUrl})` : ""}`;
-        })
-        .join("\n")
-    : "- None attached";
-  const description = redactSubcontractorDne(parsed.description || record.subject || "Work order", fullDne);
-  const details = parsed.jobDetails ? redactSubcontractorDne(parsed.jobDetails, fullDne) : "";
-
+export function buildBrandedWorkOrderText(record: JobIntakeRecord, assignment: BrandedAssignment, value?: Partial<ContractorCopy>) {
+  const copy = validateContractorCopy(record, value ?? record.dispatch?.contractorCopy);
   return [
     "FORTIFIED FENCE & WELD",
     "WORK ORDER",
-    "",
     `Fortified WO #: ${assignment.fortifiedWorkOrderNumber}`,
-    `Customer WO #: ${parsed.workOrderNumber || "—"}`,
-    `PO #: ${parsed.purchaseOrderNumber || "—"}`,
-    `Source: ${record.source}`,
-    "",
-    "ASSIGNED CONTRACTOR",
-    assignment.contractorName,
-    assignment.contractorEmail || "",
-    assignment.contractorPhone || "",
-    assignment.reason,
-    "",
-    "JOB SITE",
-    parsed.customerName || "—",
-    parsed.locationName || "—",
-    parsed.storeNumber ? `Store ${parsed.storeNumber}` : "",
-    siteLine(record),
     "",
     "SCOPE",
-    description,
-    details,
-    `Trade: ${parsed.tradeType || "—"}`,
-    `Priority: ${parsed.priority || "—"}`,
-    `Not to exceed: ${formatMoney(subcontractorDneAmount(fullDne))}`,
-    `Timeframe: ${parsed.timeframe || "—"}`,
-    `Due: ${parsed.dueDate || "—"}`,
-    "",
-    "SITE CONTACT",
-    [parsed.contactName, parsed.contactPhone, parsed.contactEmail].filter(Boolean).join(" · ") || "—",
-    "",
-    "PHOTOS AND FILES",
-    fileLines,
+    copy.scope,
+    copy.site ? `Site: ${copy.site}` : null,
+    copy.schedule ? `Schedule: ${copy.schedule}` : null,
+    `Not to exceed: ${formatMoney(copy.subcontractorDne)}`,
     "",
     "Complete the work within the not-to-exceed amount. Send before and after photos back to Fortified Fence & Weld before leaving the site.",
-    "",
-    "Fortified Fence & Weld · Field dispatch",
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
+  ].filter((line) => line !== null).join("\n");
 }
 
-export function brandedWorkOrderSubject(record: JobIntakeRecord, assignment: BrandedAssignment) {
-  const where = [record.parsed.city, record.parsed.state].filter(Boolean).join(", ");
-  return [
-    `Fortified WO ${assignment.fortifiedWorkOrderNumber}`,
-    where || null,
-    record.parsed.description || record.subject || "New assignment",
-  ]
-    .filter(Boolean)
-    .join(" · ")
-    .slice(0, 180);
+export function brandedWorkOrderSubject(assignment: BrandedAssignment) {
+  return `Fortified WO ${assignment.fortifiedWorkOrderNumber}`;
 }
 
 function wrapLine(text: string, width: number) {
@@ -96,7 +64,12 @@ function wrapLine(text: string, width: number) {
     const next = current ? `${current} ${word}` : word;
     if (next.length > width) {
       if (current) lines.push(current);
-      current = word.slice(0, width);
+      let rest = word;
+      while (rest.length > width) {
+        lines.push(rest.slice(0, width));
+        rest = rest.slice(width);
+      }
+      current = rest;
     } else {
       current = next;
     }
@@ -109,10 +82,10 @@ export async function writeBrandedWorkOrderPdf(input: {
   directory: string;
   record: JobIntakeRecord;
   assignment: BrandedAssignment;
-  files: IntakeFile[];
+  copy: ContractorCopy;
 }) {
   await mkdir(input.directory, { recursive: true });
-  const text = buildBrandedWorkOrderText(input.record, input.assignment, input.files);
+  const text = buildBrandedWorkOrderText(input.record, input.assignment, input.copy);
   const textPath = path.join(input.directory, `${input.record.id}.txt`);
   const pdfPath = path.join(input.directory, `${input.record.id}.pdf`);
   await writeFile(textPath, text, { mode: 0o600 });

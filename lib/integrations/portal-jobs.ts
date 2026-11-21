@@ -340,7 +340,8 @@ export function portalRowToJob(
       .join(" · "),
     from: input.email,
     parsed: {
-      workOrderNumber: wo,
+      workOrderNumber,
+      portalJobId: asString(pick(record, ["jobId", "portalJobId", "providerJobId"])),
       purchaseOrderNumber: asString(pick(record, ["customerPO", "purchaseOrderNumber", "poNumber", "po"])),
       customerName,
       storeNumber,

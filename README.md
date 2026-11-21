@@ -256,3 +256,24 @@ npm start
 ## License
 
 Private / internal use for Fortified Fence & Weld.
+
+### Dispatch review and delivery
+
+Intake from existing Gmail, mHelpDesk and Affiliate Connect connections does not
+email or assign a crew automatically. A matching configured route proposes a
+crew; missing or tied routes are held. Same-account notices are associated by
+customer and external work-order number. Portal/email records without a verified
+account mapping remain separate and held for review if they appear to overlap.
+
+In **Job Intake**, verify the customer limit and permission, enter a separate,
+strictly lower subcontractor limit, and write only the crew-facing scope, site
+and schedule to share. Approve and send the exact preview. Intake files, source
+links, original notes and the customer limit are not attached or carried into
+the crew email or PDF. This revision does not support opting source files into
+the outbound attachment. Approval/sending require a configured Command Center
+installation and signed-in owner; standalone local and demo can preview only.
+A send without a confirmed result remains held rather than being retried. This
+workflow records delivery without granting access to an internal raw job record;
+do not use legacy contractor portal access as a substitute for the reviewed
+projection. Live credentials, tenant aliases, and customer-specific rules still
+need an owner-led setup.

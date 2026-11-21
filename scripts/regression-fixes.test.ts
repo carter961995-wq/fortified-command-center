@@ -7,8 +7,7 @@ import path from "node:path";
 import { businessToday, calendarDate, formatDate, scheduleBucket } from "../lib/business.ts";
 import { invoicePdfLines, renderInvoicePdf } from "../lib/invoice-pdf.ts";
 import { acceptJobIntake } from "../lib/integrations/accept-intake.ts";
-import { stampLoganApproval } from "../lib/integrations/dispatch-approval.ts";
-import { releaseReviewedDispatch } from "../lib/integrations/dispatch-monitor.ts";
+import { approveContractorDispatch, releaseReviewedDispatch, saveContractorDispatchDraft } from "../lib/integrations/dispatch-monitor.ts";
 import { parseJobAssignmentText, updateJobIntakeRecord, upsertJobIntakeFromSource } from "../lib/integrations/job-intake.ts";
 import { saveLocalUpload, readLocalUpload } from "../lib/local-uploads.ts";
 import { parseAdjustmentMoney, parsePositiveMoney } from "../lib/money.ts";
@@ -191,7 +190,7 @@ test("an edited dispatch draft needs Logan's approval again and sends once", asy
       source: "manual",
       sourceRef: "approve-once",
       subject: "Dispatch me",
-      rawText: "Work Order #: WO-1\nDescription: Gate repair\nDNE: $2000",
+      rawText: "Work Order #: WO-1\nState: LA\nTrade: Gate\nDescription: Gate repair\nDNE: $2000",
     });
     const record = store.record;
     const sent: string[] = [];
@@ -203,36 +202,25 @@ test("an edited dispatch draft needs Logan's approval again and sends once", asy
       () => releaseReviewedDispatch(record.id, { sendEmail }),
       /not ready|Logan must approve/
     );
-    const draft = {
-      to: "crew@pelicangate.test",
-      subject: "Work order",
-      body: "Scope: replace the latch. Not to exceed: $1,000.00",
-      status: "draft" as const,
+    const dispatch = {
+      status: "pending_review" as const,
+      contractorEmail: "crew@pelicangate.test",
+      contractorName: "Crew",
+      routeId: "route-1",
+      fortifiedWorkOrderNumber: "FFW-2026-0001",
       updatedAt: new Date().toISOString(),
     };
-    const approved = stampLoganApproval({ ...record, emailDraft: draft }, draft);
-    await updateJobIntakeRecord(record.id, {
-      dispatch: {
-        status: "pending_review",
-        contractorEmail: "crew@pelicangate.test",
-        contractorName: "Crew",
-        updatedAt: new Date().toISOString(),
-      },
-      emailDraft: approved,
+    await updateJobIntakeRecord(record.id, { dispatch });
+    const prepared = await saveContractorDispatchDraft(record.id, {
+      subcontractorDne: 875, scope: "Replace the latch.", customerCleared: true,
     });
-    await releaseReviewedDispatch(record.id, { sendEmail });
-    await releaseReviewedDispatch(record.id, { sendEmail });
+    const approved = await approveContractorDispatch(record.id, prepared.emailDraft?.updatedAt);
+    assert.ok(approved.emailDraft);
+    await updateJobIntakeRecord(record.id, { emailDraft: { ...approved.emailDraft, body: "Unsafely modified scope." } });
+    await assert.rejects(() => releaseReviewedDispatch(record.id, { sendEmail }), /outdated drafts/);
+    await updateJobIntakeRecord(record.id, { emailDraft: approved.emailDraft });
+    await Promise.all([releaseReviewedDispatch(record.id, { sendEmail }), releaseReviewedDispatch(record.id, { sendEmail })]);
     assert.deepEqual(sent, ["crew@pelicangate.test"]);
-    const edited = { ...approved, body: "Scope: replace the whole gate.", status: "approved" as const };
-    await updateJobIntakeRecord(record.id, {
-      dispatch: {
-        status: "pending_review",
-        contractorEmail: "crew@pelicangate.test",
-        updatedAt: new Date().toISOString(),
-      },
-      emailDraft: edited,
-    });
-    await assert.rejects(() => releaseReviewedDispatch(record.id, { sendEmail }), /approve it again|Logan must approve/);
     assert.equal(sent.length, 1);
   });
 });
