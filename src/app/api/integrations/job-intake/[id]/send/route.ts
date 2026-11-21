@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendReviewedJobIntakeEmail } from "../../../../../../../lib/integrations/dispatch-monitor";
+import { requireDispatchOwner } from "../../../../../../../lib/integrations/dispatch-owner";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -19,6 +20,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       );
     }
 
+    await requireDispatchOwner();
     const result = await sendReviewedJobIntakeEmail({
       id,
       to: body.to,

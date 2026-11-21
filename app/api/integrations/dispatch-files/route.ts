@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { requireDispatchEditor } from "../../../../lib/integrations/dispatch-owner";
 import { getJobIntakeRecord } from "../../../../lib/integrations/job-intake";
 
 function dataRoot() {
@@ -18,6 +19,11 @@ function insideDataRoot(filePath: string) {
 }
 
 export async function GET(request: Request) {
+  try {
+    await requireDispatchEditor();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Owner access is required." }, { status: 403 });
+  }
   const url = new URL(request.url);
   const intakeId = url.searchParams.get("intakeId") || "";
   const record = await getJobIntakeRecord(intakeId);
@@ -25,7 +31,9 @@ export async function GET(request: Request) {
 
   const document = url.searchParams.get("document") === "1";
   const fileIndex = Number(url.searchParams.get("file"));
-  const target = document ? record.dispatch?.documentPath : record.files?.[fileIndex]?.localPath;
+  const target = document
+    ? record.dispatch?.contractorCopy && record.dispatch?.documentPath
+    : record.files?.[fileIndex]?.localPath;
   if (!target || !insideDataRoot(target)) {
     return NextResponse.json({ ok: false, error: "File is not stored on this computer." }, { status: 404 });
   }

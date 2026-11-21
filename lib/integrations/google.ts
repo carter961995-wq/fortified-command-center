@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { looksLikeJobAssignmentEmail, upsertJobIntakeFromSource } from "./job-intake.ts";
+import { isDispatchWithdrawal, looksLikeJobAssignmentEmail, upsertJobIntakeFromSource } from "./job-intake.ts";
 import { collectGmailFiles, type IntakeFile } from "./intake-files.ts";
 import { looksLikeOperationalEmail } from "./email-classify.ts";
 import { upsertInboxMessage } from "./email-inbox.ts";
@@ -332,7 +332,8 @@ function extractGmailBody(payload?: GmailPart) {
 
 async function ingestGmailMessages(
   accessToken: string,
-  messages: GoogleSyncSummary["gmail"]["messages"]
+  messages: GoogleSyncSummary["gmail"]["messages"],
+  connectedEmail: string
 ): Promise<{
   jobIntake: NonNullable<GoogleSyncSummary["jobIntake"]>;
   inbox: NonNullable<GoogleSyncSummary["inbox"]>;
@@ -354,6 +355,7 @@ async function ingestGmailMessages(
 
   for (const message of messages.slice(0, 80)) {
     const needsBody =
+      isDispatchWithdrawal(message.subject) ||
       looksLikeJobAssignmentEmail({
         subject: message.subject,
         from: message.from,
@@ -368,12 +370,13 @@ async function ingestGmailMessages(
 
     let body = message.snippet;
     let receivedAt = message.date ? new Date(message.date).toISOString() : new Date().toISOString();
-    let detail: { payload?: GmailPart; snippet?: string; internalDate?: string } | null = null;
+    let detail: { payload?: GmailPart; snippet?: string; internalDate?: string; labelIds?: string[] } | null = null;
     if (needsBody) {
       detail = await googleApi<{
         id: string;
         snippet?: string;
         internalDate?: string;
+        labelIds?: string[];
         payload?: GmailPart & { headers?: Array<{ name: string; value: string }> };
       }>(
         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${message.id}?format=full`,
@@ -398,8 +401,11 @@ async function ingestGmailMessages(
     else inboxUpdated += 1;
     counts[inbox.message.category] = (counts[inbox.message.category] ?? 0) + 1;
 
+    const sender = message.from.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0];
+    const trustedDispatchCorrection = Boolean(detail?.labelIds?.includes("SENT") &&
+      sender?.toLowerCase() === connectedEmail.toLowerCase() && isDispatchWithdrawal(message.subject));
     if (
-      !looksLikeJobAssignmentEmail({
+      !trustedDispatchCorrection && !looksLikeJobAssignmentEmail({
         subject: message.subject,
         from: message.from,
         snippet: message.snippet,
@@ -418,6 +424,7 @@ async function ingestGmailMessages(
       snippet: message.snippet,
       rawText: body,
       files: collectGmailFiles(detail?.payload, message.id),
+      trustedDispatchCorrection,
     });
 
     if (created) imported += 1;
@@ -455,6 +462,7 @@ async function ingestGmailMessages(
 }
 
 const GMAIL_JOB_QUERIES = [
+  'newer_than:120d in:sent {subject:disregard subject:withdraw subject:correction}',
   'newer_than:120d (mhelpdesk OR mhelpdesk.com OR "m help desk")',
   'newer_than:120d (truesource OR "true source" OR "affiliate connect" OR affiliateconnect)',
   'newer_than:120d ("work order" OR workorder OR "WO#" OR "WO #" OR "ticket assigned" OR dispatch)',
@@ -894,7 +902,7 @@ export async function syncGoogleWorkspace() {
     accessToken
   );
 
-  const ingested = await ingestGmailMessages(accessToken, messages);
+  const ingested = await ingestGmailMessages(accessToken, messages, connection.email);
 
   const summary: GoogleSyncSummary = {
     syncedAt: new Date().toISOString(),

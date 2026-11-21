@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
@@ -7,6 +7,7 @@ import {
   projectKey,
   type EmailCategory,
 } from "./email-classify.ts";
+import { withFileLock } from "../file-lock.ts";
 import { isDemoMode } from "../env.ts";
 import { collectFilesFromText, mergeIntakeFiles, type IntakeFile } from "./intake-files.ts";
 import { isPlaceholderIntakeRecord } from "./placeholder-data.ts";
@@ -26,6 +27,7 @@ export type ParsedJobFields = {
   state?: string;
   zip?: string;
   workOrderNumber?: string;
+  portalJobId?: string;
   purchaseOrderNumber?: string;
   description?: string;
   jobDetails?: string;
@@ -39,6 +41,14 @@ export type ParsedJobFields = {
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
+};
+
+export type ContractorCopy = {
+  subcontractorDne: number;
+  scope: string;
+  site?: string;
+  schedule?: string;
+  customerCleared: boolean;
 };
 
 export type JobEmailDraft = {
@@ -55,7 +65,7 @@ export type JobEmailDraft = {
 };
 
 export type JobDispatch = {
-  status: "pending_review" | "assigned" | "sent" | "needs_contractor";
+  status: "pending_review" | "assigned" | "sent" | "needs_contractor" | "withdrawn" | "send_uncertain";
   contractorId?: string;
   contractorName?: string;
   contractorEmail?: string;
@@ -65,6 +75,7 @@ export type JobDispatch = {
   fortifiedWorkOrderNumber?: string;
   workOrderId?: string;
   documentPath?: string;
+  contractorCopy?: ContractorCopy;
   sentAt?: string;
   error?: string;
   updatedAt: string;
@@ -88,6 +99,10 @@ export type JobIntakeRecord = {
   status: JobIntakeStatus;
   source: JobIntakeSource;
   sourceRef: string;
+  sourceRefs?: string[];
+  identityKey?: string;
+  latestSourceAt?: string;
+  dispatchHold?: string;
   receivedAt: string;
   subject?: string;
   from?: string;
@@ -157,7 +172,14 @@ export async function loadJobIntakeStore(): Promise<JobIntakeStore> {
 export async function saveJobIntakeStore(store: JobIntakeStore) {
   await ensureDir();
   const next = { ...store, updatedAt: new Date().toISOString() };
-  await writeFile(intakePath(), JSON.stringify(next, null, 2), { mode: 0o600 });
+  const target = intakePath();
+  const temporary = `${target}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, JSON.stringify(next, null, 2), { mode: 0o600 });
+    await rename(temporary, target);
+  } finally {
+    await rm(temporary, { force: true });
+  }
   return next;
 }
 
@@ -275,6 +297,11 @@ export function buildCleanJobDocument(record: JobIntakeRecord) {
 }
 
 export function buildDefaultEmailDraft(record: JobIntakeRecord): JobEmailDraft {
+  if (record.category === "work_order" || record.category === "approved_quote" || record.dispatch) {
+    return {
+      to: "", subject: "Fortified work order", body: "", status: "draft", updatedAt: new Date().toISOString(),
+    };
+  }
   const p = record.parsed;
   const to = p.contactEmail || "";
   const subject = [
@@ -331,7 +358,25 @@ function labeledBlock(text: string, labels: string[]) {
   return value || undefined;
 }
 
+// Quotes, markup and scripts are not interpreted as job instructions. This
+// extracts only simple fields and leaves incomplete notices in review.
+function normalizeAssignmentBody(body: string) {
+  if (!/<(?:html|body|table|tr|td|div|p|span|br|strong|b)(?:\s|>|\/)/i.test(body)) return body;
+  return body
+    .replace(/<(style|script|head)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<\/td>[ \t]*<td\b[^>]*>/gi, " ")
+    .replace(/<\/?(?:tr|div|p|h[1-6]|br)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .replace(/&(?:amp|#38);/gi, "&")
+    .replace(/&(?:num|#35);/gi, "#")
+    .replace(/&(?:dollar|#36);/gi, "$")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n +/g, "\n");
+}
+
 function heuristicParse(rawText: string, subject?: string): ParsedJobFields {
+  rawText = normalizeAssignmentBody(rawText);
   // Prefer body over subject so short subjects like "WO assigned" do not steal identifiers.
   const text = `${rawText}\n${subject ?? ""}`;
   const pick = (re: RegExp) => text.match(re)?.[1]?.trim();
@@ -345,9 +390,10 @@ function heuristicParse(rawText: string, subject?: string): ParsedJobFields {
   const jobDetails = [scope, details].filter(Boolean).join("\n\n") || undefined;
 
   return {
+    portalJobId: pick(/\bJob(?:\s+ID)?\s*#?\s*:\s*([0-9]+)\b/i) || pick(/\bJob\s*#\s*([0-9]+)\b/i),
     workOrderNumber:
-      pick(new RegExp(`\\bWork\\s*Order(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")) ||
-      pick(new RegExp(`\\b(?:WO|W\\.O\\.)(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")),
+      pick(new RegExp(`\\bWork\\s*Order(?:\\s*(?:#|No\\.?|Number))?${label}(?=[A-Z0-9-]*[0-9])([A-Z0-9][A-Z0-9-]*)\\b`, "i")) ||
+      pick(new RegExp(`\\b(?:WO|W\\.O\\.)(?:\\s*(?:#|No\\.?|Number))?${label}(?=[A-Z0-9-]*[0-9])([A-Z0-9][A-Z0-9-]*)\\b`, "i")),
     purchaseOrderNumber:
       pick(new RegExp(`\\bPurchase\\s*Order(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")) ||
       pick(new RegExp(`\\bP\\.?O\\.?(?:\\s*(?:#|No\\.?|Number))?${label}([A-Z0-9][A-Z0-9-]{1,})`, "i")),
@@ -428,6 +474,26 @@ ${input.body.slice(0, 12000)}`;
   }
 }
 
+function normalized(value?: string) {
+  return value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "") || "";
+}
+
+function sourceIdentity(provider: JobIntakeSource, parsed: ParsedJobFields) {
+  const customer = normalized(parsed.customerName?.replace(/:\s*\d+.*$/, ""));
+  const order = parsed.workOrderNumber?.trim().toUpperCase();
+  return customer && order ? `${provider}:${customer}:${order}` : undefined;
+}
+
+function intakeIdentity(provider: JobIntakeSource, origin: JobIntakeSource, parsed: ParsedJobFields, from?: string) {
+  const base = sourceIdentity(provider, parsed);
+  const sender = from?.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0]?.toLowerCase();
+  return base && sender && origin !== "manual" ? `${origin}:${sender}:${base}` : undefined;
+}
+
+export function isDispatchWithdrawal(subject?: string) {
+  return /^(?:(?:re|fwd):\s*)*(?:correction\s*[-–—:]\s*)?(?:disregard|withdraw|cancel)\s+(?:the\s+)?(?:fortified\s+)?(?:dispatch|work order|wo)\b/i.test(subject?.trim() || "");
+}
+
 export async function upsertJobIntakeFromSource(input: {
   source: JobIntakeSource;
   sourceRef: string;
@@ -438,8 +504,8 @@ export async function upsertJobIntakeFromSource(input: {
   rawText: string;
   parsed?: ParsedJobFields;
   files?: IntakeFile[];
+  trustedDispatchCorrection?: boolean;
 }): Promise<{ record: JobIntakeRecord; created: boolean }> {
-  const store = await loadJobIntakeStore();
   const detectedSource =
     input.source === "gmail"
       ? detectDispatchSource({
@@ -449,20 +515,8 @@ export async function upsertJobIntakeFromSource(input: {
           body: input.rawText,
         })
       : input.source;
-  const existing = store.records.find(
-    (record) =>
-      (record.source === detectedSource && record.sourceRef === input.sourceRef) ||
-      (record.source === input.source && record.sourceRef === input.sourceRef) ||
-      (input.parsed?.workOrderNumber &&
-        record.parsed.workOrderNumber &&
-        record.parsed.workOrderNumber === input.parsed.workOrderNumber)
-  );
   const now = new Date().toISOString();
-  const parsed = input.parsed ?? (await parseJobAssignmentText({
-    subject: input.subject,
-    from: input.from,
-    body: input.rawText,
-  }));
+  const parsed = input.parsed ?? heuristicParse(input.rawText, input.subject);
   const category = classifyEmail({
     subject: input.subject,
     from: input.from,
@@ -470,76 +524,149 @@ export async function upsertJobIntakeFromSource(input: {
     body: input.rawText,
   });
 
-  const files = mergeIntakeFiles(existing?.files, [...(input.files ?? []), ...collectFilesFromText(input.rawText)]);
+  const sender = input.from?.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0]?.toLowerCase();
+  const directPortal = input.source === "mhelpdesk" || input.source === "truesource";
+  const portalScope = directPortal ? `${sender || "unidentified"}:${normalized(parsed.customerName)}` : "";
+  const sourceKey = `${input.source}:${portalScope}:${input.sourceRef}`;
+  const identity = intakeIdentity(detectedSource, input.source, parsed, input.from);
+  const withdrawal = isDispatchWithdrawal(input.subject);
+  return withFileLock("job-intake-write", async () => {
+    const store = await loadJobIntakeStore();
+    const exact = store.records.find((row) =>
+      row.sourceRefs?.includes(sourceKey) ||
+      (!row.sourceRefs && (row.source === detectedSource || row.source === input.source) && row.sourceRef === input.sourceRef &&
+        (input.source === "gmail" || input.source === "manual" ||
+          (row.from?.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i)?.[0]?.toLowerCase() === sender &&
+            normalized(row.parsed.customerName) === normalized(parsed.customerName)))));
+    const inferredOrigin = (row: JobIntakeRecord) => row.sourceRefs?.[0]?.startsWith("gmail:") ? "gmail" : row.source;
+    const matches = identity ? store.records.filter((row) =>
+      (row.identityKey || intakeIdentity(row.source, inferredOrigin(row), row.parsed, row.from)) === identity) : [];
+    const possibleAliasKey = sourceIdentity(detectedSource, parsed);
+    const aliases = possibleAliasKey && detectedSource !== "gmail"
+      ? store.records.filter((row) => inferredOrigin(row) !== input.source &&
+        sourceIdentity(row.source, row.parsed) === possibleAliasKey)
+      : [];
+    const aliasHold = "A portal and email may refer to the same work order. Verify the account mapping before dispatch.";
+    const trustedCorrection = input.source === "gmail" && input.trustedDispatchCorrection && withdrawal && parsed.workOrderNumber;
+    const correctionMatches = trustedCorrection ? store.records.filter((row) =>
+      row.parsed.workOrderNumber?.trim().toUpperCase() === parsed.workOrderNumber?.trim().toUpperCase()) : [];
+    if (correctionMatches.length) {
+      const correctionHold = correctionMatches.length === 1
+        ? "This crew dispatch was withdrawn. The underlying job has not been canceled."
+        : "A crew withdrawal matched multiple jobs. Verify which dispatch was withdrawn.";
+      let first: JobIntakeRecord | undefined;
+      store.records = store.records.map((row) => {
+        if (!correctionMatches.some((match) => match.id === row.id)) return row;
+        const updated: JobIntakeRecord = {
+          ...row, updatedAt: now, dispatchHold: correctionHold,
+          sourceRefs: [...new Set([...(row.sourceRefs ?? [`${row.source}:${row.sourceRef}`]), sourceKey])],
+          dispatch: correctionMatches.length === 1 && row.dispatch
+            ? { ...row.dispatch, status: "withdrawn", updatedAt: now } : row.dispatch,
+        };
+        first ??= updated;
+        return updated;
+      });
+      await saveJobIntakeStore(store);
+      return { record: first!, created: false };
+    }
+    const existing = exact ?? (matches.length === 1 ? matches[0] : undefined);
+    if (aliases.length) {
+      store.records = store.records.map((row) => aliases.some((alias) => alias.id === row.id)
+        ? { ...row, dispatchHold: row.dispatchHold || aliasHold, updatedAt: now } : row);
+    }
+    const files = mergeIntakeFiles(existing?.files, [...(input.files ?? []), ...collectFilesFromText(input.rawText)]);
 
-  if (existing) {
-    const updated: JobIntakeRecord = {
-      ...existing,
+    if (existing) {
+      const replay = Boolean((existing.sourceRefs?.includes(sourceKey) && !input.receivedAt) ||
+        (input.receivedAt && input.receivedAt < (existing.latestSourceAt ?? existing.receivedAt)));
+      const limitConflict = !replay && parsed.dneAmount != null && existing.parsed.dneAmount != null &&
+        parsed.dneAmount !== existing.parsed.dneAmount;
+      const idConflict = Boolean((parsed.workOrderNumber && existing.parsed.workOrderNumber &&
+        normalized(parsed.workOrderNumber) !== normalized(existing.parsed.workOrderNumber)) ||
+        (parsed.portalJobId && existing.parsed.portalJobId && parsed.portalJobId !== existing.parsed.portalJobId));
+      const updated: JobIntakeRecord = {
+        ...existing,
+        sourceRefs: [...new Set([...(existing.sourceRefs ?? [`${existing.source}:${existing.sourceRef}`]), sourceKey])],
+        identityKey: existing.identityKey || identity,
+        latestSourceAt: replay ? existing.latestSourceAt : input.receivedAt ?? now,
+        dispatchHold: existing.dispatchHold || (withdrawal ? "This dispatch was withdrawn. Verify the next assignment before sending." :
+          idConflict || limitConflict ? "Incoming work-order identifiers or customer limits conflict. Hold before dispatch." :
+          aliases.length ? aliasHold : undefined),
+        dispatch: withdrawal && existing.dispatch ? { ...existing.dispatch, status: "withdrawn", updatedAt: now } : existing.dispatch,
+        subject: replay ? existing.subject : input.subject ?? existing.subject,
+        from: replay ? existing.from : input.from ?? existing.from,
+        snippet: replay ? existing.snippet : input.snippet ?? existing.snippet,
+        rawText: replay ? existing.rawText : input.rawText || existing.rawText,
+        parsed: replay || idConflict || limitConflict ? existing.parsed : {
+          ...existing.parsed,
+          ...Object.fromEntries(Object.entries(parsed).filter(([, value]) => value != null && value !== "")),
+        },
+        category: replay || category === "other" || existing.category === "work_order" || existing.category === "approved_quote"
+          ? existing.category || category : category,
+        files,
+        photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name).filter(Boolean),
+        updatedAt: now,
+      };
+      store.records = store.records.map((record) => (record.id === existing.id ? updated : record));
+      await saveJobIntakeStore(store);
+      return { record: updated, created: false };
+    }
+
+    const record: JobIntakeRecord = {
+      id: randomUUID(),
+      status: "new",
       source: detectedSource,
-      subject: input.subject ?? existing.subject,
-      from: input.from ?? existing.from,
-      snippet: input.snippet ?? existing.snippet,
-      rawText: input.rawText || existing.rawText,
-      parsed: { ...existing.parsed, ...parsed },
-      category: category === "other" ? existing.category || category : category,
-      files,
+      sourceRef: input.sourceRef,
+      sourceRefs: [sourceKey],
+      identityKey: identity,
+      latestSourceAt: input.receivedAt ?? now,
+      dispatchHold: withdrawal ? "This dispatch was withdrawn. Verify the next assignment before sending." :
+        matches.length > 1 ? "Multiple existing work orders share this customer and number. Review before dispatch." : aliases.length ? aliasHold : undefined,
+      receivedAt: input.receivedAt ?? now,
+      subject: input.subject,
+      from: input.from,
+      snippet: input.snippet,
+      rawText: input.rawText,
+      parsed,
+      category,
+      notes: "",
+      scheduledDate: parsed.dueDate ?? null,
       photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name).filter(Boolean),
+      files,
+      workOrderId: null,
+      emailDraft: null,
+      mhelpdeskPush: {
+        status: await mhelpdeskPushStatus(),
+        fieldMap: buildMhelpdeskFieldMap({
+          id: "tmp",
+          status: "new",
+          source: input.source,
+          sourceRef: input.sourceRef,
+          receivedAt: input.receivedAt ?? now,
+          rawText: input.rawText,
+          parsed,
+          category,
+          notes: "",
+          photoUrls: [],
+          createdAt: now,
+          updatedAt: now,
+        }),
+        updatedAt: now,
+      },
+      createdAt: now,
       updatedAt: now,
     };
-    store.records = store.records.map((record) => (record.id === existing.id ? updated : record));
-    await saveJobIntakeStore(store);
-    return { record: updated, created: false };
-  }
-
-  const record: JobIntakeRecord = {
-    id: randomUUID(),
-    status: "new",
-    source: detectedSource,
-    sourceRef: input.sourceRef,
-    receivedAt: input.receivedAt ?? now,
-    subject: input.subject,
-    from: input.from,
-    snippet: input.snippet,
-    rawText: input.rawText,
-    parsed,
-    category,
-    notes: "",
-    scheduledDate: parsed.dueDate ?? null,
-    photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name).filter(Boolean),
-    files,
-    workOrderId: null,
-    emailDraft: null,
-    mhelpdeskPush: {
+    record.emailDraft = buildDefaultEmailDraft(record);
+    record.mhelpdeskPush = {
       status: await mhelpdeskPushStatus(),
-      fieldMap: buildMhelpdeskFieldMap({
-        id: "tmp",
-        status: "new",
-        source: input.source,
-        sourceRef: input.sourceRef,
-        receivedAt: input.receivedAt ?? now,
-        rawText: input.rawText,
-        parsed,
-        category,
-        notes: "",
-        photoUrls: [],
-        createdAt: now,
-        updatedAt: now,
-      }),
+      fieldMap: buildMhelpdeskFieldMap(record),
       updatedAt: now,
-    },
-    createdAt: now,
-    updatedAt: now,
-  };
-  record.emailDraft = buildDefaultEmailDraft(record);
-  record.mhelpdeskPush = {
-    status: await mhelpdeskPushStatus(),
-    fieldMap: buildMhelpdeskFieldMap(record),
-    updatedAt: now,
-  };
+    };
 
-  store.records.unshift(record);
-  await saveJobIntakeStore(store);
-  return { record, created: true };
+    store.records.unshift(record);
+    await saveJobIntakeStore(store);
+    return { record, created: true };
+  });
 }
 
 export async function getJobIntakeRecord(id: string) {
@@ -554,30 +681,39 @@ export async function updateJobIntakeRecord(
       JobIntakeRecord,
       "status" | "notes" | "scheduledDate" | "photoUrls" | "files" | "dispatch" | "parsed" | "emailDraft" | "mhelpdeskPush" | "workOrderId"
     >
-  >
+  >,
+  options?: { expectedUpdatedAt?: string; failOnDispatchHold?: boolean }
 ) {
-  const store = await loadJobIntakeStore();
-  const existing = store.records.find((record) => record.id === id);
-  if (!existing) throw new Error("Job intake record not found.");
+  return withFileLock("job-intake-write", async () => {
+    const store = await loadJobIntakeStore();
+    const existing = store.records.find((record) => record.id === id);
+    if (!existing) throw new Error("Job intake record not found.");
+    if (options?.expectedUpdatedAt && existing.updatedAt !== options.expectedUpdatedAt) {
+      throw new Error("This intake changed while you were reviewing it. Recheck before taking action.");
+    }
+    if (options?.failOnDispatchHold && (existing.dispatchHold || existing.dispatch?.status === "withdrawn")) {
+      throw new Error(existing.dispatchHold || "Dispatch withdrawn.");
+    }
 
-  const updated: JobIntakeRecord = {
-    ...existing,
-    ...patch,
-    parsed: patch.parsed ? { ...existing.parsed, ...patch.parsed } : existing.parsed,
-    updatedAt: new Date().toISOString(),
-  };
-  if (patch.notes !== undefined || patch.scheduledDate !== undefined || patch.parsed) {
-    updated.mhelpdeskPush = {
-      status: updated.mhelpdeskPush?.status ?? "needs_connection",
-      fieldMap: buildMhelpdeskFieldMap(updated),
+    const updated: JobIntakeRecord = {
+      ...existing,
+      ...patch,
+      parsed: patch.parsed ? { ...existing.parsed, ...patch.parsed } : existing.parsed,
       updatedAt: new Date().toISOString(),
-      error: updated.mhelpdeskPush?.error,
     };
-  }
+    if (patch.notes !== undefined || patch.scheduledDate !== undefined || patch.parsed) {
+      updated.mhelpdeskPush = {
+        status: updated.mhelpdeskPush?.status ?? "needs_connection",
+        fieldMap: buildMhelpdeskFieldMap(updated),
+        updatedAt: new Date().toISOString(),
+        error: updated.mhelpdeskPush?.error,
+      };
+    }
 
-  store.records = store.records.map((record) => (record.id === id ? updated : record));
-  await saveJobIntakeStore(store);
-  return updated;
+    store.records = store.records.map((record) => (record.id === id ? updated : record));
+    await saveJobIntakeStore(store);
+    return updated;
+  });
 }
 
 export async function ensureSeedJobIntake() {

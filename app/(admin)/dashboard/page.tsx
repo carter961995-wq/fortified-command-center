@@ -104,7 +104,7 @@ export default async function DashboardPage() {
           <p className="app-kicker text-xs font-black uppercase tracking-[0.2em] text-orange-300">Command Center</p>
           <h1 className="app-title mt-2 text-3xl font-black text-white md:text-4xl">Fortified Command Center</h1>
           <p className="app-copy mt-2 max-w-2xl text-base font-semibold text-slate-200">
-            mHelpDesk, Affiliate Connect, and Gmail stay under watch. A new work order is prepared for review before anyone is assigned or emailed. Contractors are told half of our not-to-exceed.
+            mHelpDesk, Affiliate Connect, and Gmail stay under watch. A new work order is prepared for review before anyone is assigned or emailed. The contractor sees only the lower limit and job details you choose.
           </p>
         </div>
         <div className="app-actions flex flex-wrap gap-2">
@@ -250,7 +250,7 @@ export default async function DashboardPage() {
             )}
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/job-intake">
               <p className="font-black text-white">2. Review the dispatch, then send it</p>
-              <p className="mt-1 text-sm font-semibold text-slate-200">Confirm the contractor, photos, and the subcontractor not-to-exceed (half of ours). Approve the draft, then send.</p>
+              <p className="mt-1 text-sm font-semibold text-slate-200">Confirm the contractor, customer permission, selected details, and the lower subcontractor limit. Approve the draft, then send.</p>
             </Link>
             <Link className="app-row rounded-lg border border-[#2a4063] bg-[#0c172b] p-4 hover:border-orange-400" href="/jobs">
               <p className="font-black text-white">3. Run it from Jobs</p>

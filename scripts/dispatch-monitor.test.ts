@@ -5,10 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { buildBrandedWorkOrderText } from "../lib/integrations/branded-work-order.ts";
 import { matchContractor, type ContractorCandidate, type DispatchRoute } from "../lib/integrations/contractor-match.ts";
-import { stampLoganApproval } from "../lib/integrations/dispatch-approval.ts";
-import { dispatchIncomingWorkOrders, releaseReviewedDispatch } from "../lib/integrations/dispatch-monitor.ts";
-import { updateJobIntakeRecord, upsertJobIntakeFromSource } from "../lib/integrations/job-intake.ts";
-import { redactSubcontractorDne, subcontractorDneAmount } from "../lib/integrations/subcontractor-dne.ts";
+import { approveContractorDispatch, dispatchIncomingWorkOrders, releaseReviewedDispatch, saveContractorDispatchDraft } from "../lib/integrations/dispatch-monitor.ts";
+import { upsertJobIntakeFromSource } from "../lib/integrations/job-intake.ts";
+import { subcontractorDneAmount } from "../lib/integrations/subcontractor-dne.ts";
 import { collectFilesFromText, collectGmailFiles } from "../lib/integrations/intake-files.ts";
 import { resetLocalDataStoreForTests } from "../src/lib/demo-client.ts";
 
@@ -103,7 +102,7 @@ test("gmail attachments and picture links are collected with the job", () => {
   assert.equal(links[0].name, "after.png");
 });
 
-test("branded work order carries Fortified identity, site, and contractor", () => {
+test("branded work order uses only explicitly selected details and the separate crew cap", () => {
   const text = buildBrandedWorkOrderText(
     {
       id: "job-1",
@@ -116,7 +115,9 @@ test("branded work order carries Fortified identity, site, and contractor", () =
         customerName: "Bayou Retail Group",
         city: "New Orleans",
         state: "LA",
+        tradeType: "Gate",
         workOrderNumber: "MHD-10418",
+        purchaseOrderNumber: "PRIVATE-PO",
         description: "Gate operator reverse fault",
         dneAmount: 1200,
         jobDetails: "Operator reverses mid-cycle. DNE: $1,200.00. Photo attached.",
@@ -133,25 +134,25 @@ test("branded work order carries Fortified identity, site, and contractor", () =
       contractorEmail: "dispatch@pelicangate.test",
       reason: "Predetermined route covers New Orleans, LA.",
     },
-    [{ name: "dock-before.jpg", source: "gmail" }]
+    { subcontractorDne: 720, scope: "Adjust operator", site: "Approved jobsite", customerCleared: true }
   );
   assert.match(text, /FORTIFIED FENCE & WELD/);
   assert.match(text, /FFW-2026-0001/);
-  assert.match(text, /Pelican Gate Services/);
-  assert.match(text, /MHD-10418/);
-  assert.match(text, /dock-before.jpg/);
-  assert.match(text, /Not to exceed: \$600\.00/);
-  assert.match(text, /DNE: \$600\.00/);
-  assert.doesNotMatch(text, /1,200/);
-  assert.doesNotMatch(text, /\$1200/);
+  assert.match(text, /Adjust operator|Approved jobsite/);
+  assert.match(text, /Not to exceed: \$720\.00/);
+  assert.doesNotMatch(text, /1,200|\$1200|operator reverse fault|PRIVATE-PO|MHD-10418|Predetermined route/);
 });
 
-test("subcontractor not-to-exceed is half of the customer DNE", () => {
-  assert.equal(subcontractorDneAmount(2000), 1000);
-  assert.equal(subcontractorDneAmount(850), 425);
-  assert.equal(redactSubcontractorDne("We have a DNE of $2,000.00 on this call.", 2000), "We have a DNE of $1,000.00 on this call.");
-  assert.equal(redactSubcontractorDne("Scope stays the same and the gate is 20 feet.", 2000), "Scope stays the same and the gate is 20 feet.");
+test("subcontractor cap is explicit, positive, precise and strictly lower", () => {
+  assert.equal(subcontractorDneAmount(2000), null);
+  assert.equal(subcontractorDneAmount(850, 425), 425);
+  assert.equal(subcontractorDneAmount(850, 850), null);
+  assert.equal(subcontractorDneAmount(850, 851), null);
+  assert.equal(subcontractorDneAmount(undefined, 400), null);
+  assert.equal(subcontractorDneAmount(850, 0), null);
+  assert.equal(subcontractorDneAmount(850, 100.001), null);
 });
+
 
 test("a new mHelpDesk assignment becomes a branded work order for the location contractor", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "fortified-dispatch-"));
@@ -230,38 +231,36 @@ Trade: Fence`,
     assert.equal(nola?.dispatch?.status, "pending_review");
     assert.equal(nola?.emailDraft?.status, "draft");
     assert.equal(nola?.parsed.dneAmount, 1200);
-    assert.match(nola?.emailDraft?.body || "", /Not to exceed: \$600\.00/);
-    assert.doesNotMatch(nola?.emailDraft?.body || "", /1,200|\$1200/);
+    assert.equal(nola?.emailDraft?.body, "");
+    assert.equal(nola?.dispatch?.documentPath, undefined);
     assert.equal(nola?.dispatch?.contractorName, "Pelican Gate Services");
     assert.match(nola?.dispatch?.fortifiedWorkOrderNumber || "", /^FFW-/);
     assert.ok((nola?.files?.length ?? 0) >= 1);
     assert.equal(dallas?.dispatch?.status, "needs_contractor");
 
-    await assert.rejects(
-      () => releaseReviewedDispatch(nola?.id || "", { sendEmail: async () => ({ id: "should-not-send" }) }),
-      /Logan must approve/
-    );
-
-    const current = JSON.parse(await readFile(path.join(dir, "job-intake.json"), "utf8")) as {
-      records: Array<{ id: string; emailDraft?: { to: string; subject: string; body: string; status: "draft"; updatedAt: string }; files?: []; parsed: { workOrderNumber?: string }; rawText: string; status: "new"; source: "mhelpdesk"; sourceRef: string; receivedAt: string; category: "work_order"; notes: string; photoUrls: string[]; createdAt: string; updatedAt: string }>;
-    };
-    const fresh = current.records.find((record) => record.id === nola?.id);
-    if (!fresh?.emailDraft) throw new Error("missing draft");
-    await updateJobIntakeRecord(nola?.id || "", {
-      emailDraft: stampLoganApproval(fresh as never, fresh.emailDraft),
-    });
+    const id = nola!.id;
+    const safeCopy = { subcontractorDne: 720, scope: "Diagnose the operator and test the gate.", site: "Approved site", customerCleared: false };
+    await assert.rejects(() => saveContractorDispatchDraft(id, { ...safeCopy, scope: "Customer NTE $1,200" }), /Remove pricing/);
+    const drafted = await saveContractorDispatchDraft(id, safeCopy);
+    await assert.rejects(() => approveContractorDispatch(id, drafted.emailDraft?.updatedAt), /customer permits/);
+    const confirmed = await saveContractorDispatchDraft(id, { ...safeCopy, customerCleared: true });
+    await assert.rejects(() => releaseReviewedDispatch(id, { sendEmail: async () => ({ id: "should-not-send" }) }), /Logan must approve/);
+    await assert.rejects(() => approveContractorDispatch(id, "stale"), /draft changed/);
+    await approveContractorDispatch(id, confirmed.emailDraft?.updatedAt);
 
     const released = await releaseReviewedDispatch(nola?.id || "", {
       sendEmail: async (input) => {
         sent.push(input.to);
         assert.match(input.subject, /FFW-/);
         assert.match(input.body, /FORTIFIED FENCE & WELD/);
-        assert.match(input.body, /\$600\.00/);
-        assert.doesNotMatch(input.body, /1,200|\$1200/);
+        assert.match(input.body, /\$720\.00/);
+        assert.doesNotMatch(input.body, /1,200|\$1200|dock-before|cdn\.|Operator reverses/);
         assert.ok(input.pdfPath);
         const pdf = await readFile(input.pdfPath);
         assert.ok(pdf.subarray(0, 4).toString() === "%PDF");
-        assert.equal(input.files.some((file) => file.name.endsWith(".pdf")), false);
+        assert.deepEqual(input.files, []);
+        const writtenText = await readFile(input.pdfPath.replace(/\.pdf$/, ".txt"), "utf8");
+        assert.equal(writtenText, input.body);
         return { id: "sent-1" };
       },
     });
@@ -275,14 +274,77 @@ Trade: Fence`,
       work_order_photos: Array<{ caption?: string }>;
     };
     assert.equal(snapshot.work_orders.length, 1);
-    assert.equal(snapshot.work_orders[0].subcontractor_id, pelican.id);
+    assert.equal(snapshot.work_orders[0].subcontractor_id, null);
     assert.equal(snapshot.work_orders[0].not_to_exceed_amount, 1200);
-    assert.match(snapshot.work_orders[0].internal_notes || "", /Subcontractor NTE \$600\.00/);
+    assert.match(snapshot.work_orders[0].internal_notes || "", /Subcontractor NTE \$720\.00/);
     assert.match(snapshot.work_orders[0].work_order_number, /^FFW-/);
     assert.equal(snapshot.work_order_photos[0].caption, "dock-before.jpg");
   } finally {
     process.env.FORTIFIED_USER_DATA_DIR = previousDir;
     process.env.NEXT_PUBLIC_DEMO_MODE = previousDemo;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("HTML intake dedupes same sender/customer/order and holds an unmapped portal alias or withdrawal", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "fortified-intake-fixtures-"));
+  const previousDir = process.env.FORTIFIED_USER_DATA_DIR;
+  process.env.FORTIFIED_USER_DATA_DIR = dir;
+  try {
+    const fixture = (ref: string, label = "Example Retail", order = "WO-501", from = "tenant-a@mhelp.co") => ({
+      source: "gmail" as const, sourceRef: ref, from,
+      subject: `New assignment | WO # ${order}`,
+      rawText: `<table><tr><td>Job ID #:</td><td>1501</td></tr><tr><td>Customer:</td><td>${label}</td></tr><tr><td>Work Order #:</td><td>${order}</td></tr><tr><td>State:</td><td>LA</td></tr><tr><td>Trade:</td><td>Gate</td></tr><tr><td>Issue:</td><td>Adjust gate.</td></tr></table>`,
+    });
+    const first = await upsertJobIntakeFromSource(fixture("synthetic-1"));
+    assert.equal(first.record.parsed.portalJobId, "1501");
+    assert.equal(first.record.parsed.customerName, "Example Retail");
+    assert.equal(first.record.parsed.workOrderNumber, "WO-501");
+    assert.equal(first.record.parsed.dneAmount, null);
+    assert.equal(first.record.emailDraft?.body, "");
+    const replay = await upsertJobIntakeFromSource(fixture("synthetic-2"));
+    assert.equal(replay.created, false);
+    assert.equal(replay.record.id, first.record.id);
+    assert.notEqual((await upsertJobIntakeFromSource(fixture("synthetic-3", "Example Retail", "WO-502"))).record.id, first.record.id);
+    assert.notEqual((await upsertJobIntakeFromSource(fixture("synthetic-4", "Other Example"))).record.id, first.record.id);
+    assert.notEqual((await upsertJobIntakeFromSource(fixture("synthetic-5", "Example Retail", "WO-501", "tenant-b@mhelp.co"))).record.id, first.record.id);
+    const correction = await upsertJobIntakeFromSource({ ...fixture("synthetic-6"), subject: "CORRECTION - Disregard Work Order WO-501" });
+    assert.match(correction.record.dispatchHold ?? "", /withdrawn/);
+    const after = await upsertJobIntakeFromSource(fixture("synthetic-7"));
+    assert.equal(after.record.id, first.record.id);
+    assert.match(after.record.dispatchHold ?? "", /withdrawn/);
+    const portal = await upsertJobIntakeFromSource({
+      ...fixture("portal-1501"), source: "mhelpdesk", from: "login@example.test",
+    });
+    assert.notEqual(portal.record.id, first.record.id);
+    assert.match(portal.record.dispatchHold ?? "", /account mapping/);
+  } finally {
+    if (previousDir === undefined) delete process.env.FORTIFIED_USER_DATA_DIR;
+    else process.env.FORTIFIED_USER_DATA_DIR = previousDir;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("trusted Sent-folder corrections hold a crew dispatch without changing the job status", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "fortified-withdrawal-"));
+  const previousDir = process.env.FORTIFIED_USER_DATA_DIR;
+  process.env.FORTIFIED_USER_DATA_DIR = dir;
+  try {
+    const existing = await upsertJobIntakeFromSource({
+      source: "mhelpdesk", sourceRef: "portal-701", from: "tenant@example.test",
+      subject: "Work order assigned", rawText: "Customer: Example Retail\nWork Order #: WO-701",
+    });
+    const correction = await upsertJobIntakeFromSource({
+      source: "gmail", sourceRef: "synthetic-disregard", from: "owner@example.test",
+      subject: "CORRECTION - Disregard Work Order WO-701", rawText: "Do not schedule this crew.",
+      trustedDispatchCorrection: true,
+    });
+    assert.equal(correction.record.id, existing.record.id);
+    assert.equal(correction.record.status, existing.record.status);
+    assert.match(correction.record.dispatchHold ?? "", /crew dispatch was withdrawn/);
+  } finally {
+    if (previousDir === undefined) delete process.env.FORTIFIED_USER_DATA_DIR;
+    else process.env.FORTIFIED_USER_DATA_DIR = previousDir;
     await rm(dir, { recursive: true, force: true });
   }
 });

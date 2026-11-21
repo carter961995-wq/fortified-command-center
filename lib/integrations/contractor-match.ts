@@ -88,13 +88,15 @@ export function routeApplies(route: DispatchRoute, job: JobLocation) {
 export function matchContractor(
   job: JobLocation,
   routes: DispatchRoute[],
-  contractors: ContractorCandidate[]
+  contractors: ContractorCandidate[],
+  options?: { routeOnly?: boolean }
 ): ContractorMatch | null {
   const byId = new Map(contractors.filter(activeContractor).map((contractor) => [contractor.id, contractor]));
   const jobState = normalizeStateCode(job.state);
   const jobCity = job.city?.trim() || "";
 
   let bestRoute: { route: DispatchRoute; contractor: ContractorCandidate; score: number } | null = null;
+  let ambiguous = false;
   for (const route of routes) {
     if (!routeApplies(route, job)) continue;
     const contractor = byId.get(route.subcontractorId);
@@ -104,9 +106,15 @@ export function matchContractor(
     if (route.zipPrefixes.length) score += 20;
     if (route.trades.length) score += 15;
     if (contractor.preferred) score += 5;
-    if (!bestRoute || score > bestRoute.score) bestRoute = { route, contractor, score };
+    if (!bestRoute || score > bestRoute.score) {
+      bestRoute = { route, contractor, score };
+      ambiguous = false;
+    } else if (bestRoute.score === score && bestRoute.contractor.id !== contractor.id) {
+      ambiguous = true;
+    }
   }
 
+  if (options?.routeOnly && (!bestRoute || ambiguous)) return null;
   if (bestRoute) {
     const where = [jobCity, jobState].filter(Boolean).join(", ") || "this location";
     return {

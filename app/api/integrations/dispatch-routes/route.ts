@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireDispatchEditor } from "../../../../lib/integrations/dispatch-owner";
 import { isDemoMode } from "../../../../lib/env";
 import {
   loadDispatchRoutes,
@@ -23,6 +24,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await requireDispatchEditor();
     const body = (await request.json()) as {
       action?: "save" | "delete";
       id?: string;

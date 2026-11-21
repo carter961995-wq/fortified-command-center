@@ -49,6 +49,11 @@ export function emailDispatchFingerprint(record: JobIntakeRecord, draft: Pick<Jo
         cc: (draft.cc ?? "").trim().toLowerCase(),
         subject: draft.subject.trim(),
         body: draft.body.trim(),
+        customerDne: record.parsed.dneAmount,
+        contractorCopy: record.dispatch?.contractorCopy,
+        routeId: record.dispatch?.routeId,
+        contractorId: record.dispatch?.contractorId,
+        location: [record.parsed.state, record.parsed.city, record.parsed.zip, record.parsed.tradeType],
         scope: [record.parsed.description, record.parsed.jobDetails, record.parsed.workOrderNumber, record.parsed.purchaseOrderNumber]
           .filter(Boolean)
           .join("\n"),

@@ -156,13 +156,13 @@ export function DispatchMonitorPanel() {
         <div>
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-orange-300">
             <Radio className="size-4" />
-            Live dispatch
+            Dispatch intake
           </p>
           <h2 className="mt-1 text-2xl font-black text-white">Watch for new work orders</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200">
             The Command Center keeps checking mHelpDesk, Affiliate Connect, and Gmail. A new work order is matched to
-            the contractor for that location and held in Job Intake. Review the crew, photos, and subcontractor
-            not-to-exceed, then approve and send. Their not-to-exceed is half of the DNE we received.
+            a configured crew and held in Job Intake. Review the crew-facing scope and enter its separate,
+            lower limit. Nothing is sent automatically.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

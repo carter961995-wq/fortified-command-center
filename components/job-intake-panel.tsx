@@ -14,7 +14,7 @@ import {
   Send,
   StickyNote,
 } from "lucide-react";
-import { subcontractorDneAmount } from "../lib/integrations/subcontractor-dne";
+import type { ContractorCopy } from "../lib/integrations/job-intake";
 
 type ParsedJobFields = {
   customerName?: string;
@@ -25,6 +25,7 @@ type ParsedJobFields = {
   state?: string;
   zip?: string;
   workOrderNumber?: string;
+  portalJobId?: string;
   purchaseOrderNumber?: string;
   description?: string;
   jobDetails?: string;
@@ -44,6 +45,7 @@ type JobIntakeRecord = {
   status: "new" | "reviewed" | "tracked" | "dismissed";
   source: "gmail" | "mhelpdesk" | "truesource" | "manual";
   sourceRef: string;
+  dispatchHold?: string;
   receivedAt: string;
   subject?: string;
   from?: string;
@@ -62,12 +64,13 @@ type JobIntakeRecord = {
   photoUrls: string[];
   files?: Array<{ name: string; mimeType?: string; sourceUrl?: string; localPath?: string }>;
   dispatch?: {
-    status: "pending_review" | "assigned" | "sent" | "needs_contractor";
+    status: "pending_review" | "assigned" | "sent" | "needs_contractor" | "withdrawn" | "send_uncertain";
     contractorName?: string;
     contractorEmail?: string;
     reason?: string;
     fortifiedWorkOrderNumber?: string;
     documentPath?: string;
+    contractorCopy?: ContractorCopy;
     sentAt?: string;
     error?: string;
   } | null;
@@ -143,6 +146,8 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
     () => records.find((record) => record.id === selectedId) ?? records[0] ?? null,
     [records, selectedId]
   );
+
+  const crewWorkflow = Boolean(selected?.dispatch || selected?.dispatchHold || ["work_order", "approved_quote"].includes(selected?.category ?? ""));
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -293,7 +298,7 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
       setRecords((current) => current.map((record) => (record.id === body.record.id ? body.record : record)));
       setMessage(
         body.record?.dispatch?.status === "sent"
-          ? "Reviewed dispatch sent. The contractor was told half of our DNE."
+          ? "Reviewed dispatch sent with the approved crew-only scope and limit."
           : body.record?.emailDraft?.status === "sent"
             ? "Reviewed email sent."
             : "Dispatch saved after review. The contractor email is still waiting on a deliverable address."
@@ -309,8 +314,7 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
           <h1 className="mt-1 text-3xl font-black uppercase tracking-tight text-white">Job Intake</h1>
           <p className="mt-2 max-w-3xl text-sm font-semibold text-slate-400">
             mHelpDesk, Affiliate Connect, and Gmail stay under watch. New assignments are prepared and held for review.
-            Approve the draft, then send. That assigns the crew and emails a Fortified work order. The contractor
-            not-to-exceed is half of the DNE we received.
+            Review the configured crew, enter a lower subcontractor limit, and choose what to share. Nothing sends automatically.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -505,10 +509,11 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                       <p className="mt-2 text-sm font-semibold text-amber-100">
                         This package is waiting. Approve the draft, then send, to assign{" "}
                         {selected.dispatch.contractorName || "the contractor"} and email the Fortified work order.
-                        Their not-to-exceed will be {money(subcontractorDneAmount(selected.parsed.dneAmount))}.
+                        Review the crew-facing copy and confirm customer permission before sending.
                       </p>
                     ) : null}
                     <p className="mt-2 text-sm text-slate-400">{selected.dispatch.error || selected.dispatch.reason}</p>
+                    {selected.dispatch.status === "send_uncertain" ? <p className="mt-2 text-sm text-amber-200">Delivery unconfirmed. Check Gmail Sent before any manual retry.</p> : null}
                     {selected.dispatch.documentPath ? (
                       <a
                         className="mt-3 inline-block text-sm font-black text-orange-300"
@@ -520,8 +525,10 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                   </div>
                 ) : null}
 
+                {selected.dispatchHold ? <p className="mt-3 text-sm font-semibold text-amber-200">{selected.dispatchHold}</p> : null}
                 <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   <Field label="Work order #" value={selected.parsed.workOrderNumber} />
+                  <Field label="Provider job ID" value={selected.parsed.portalJobId} />
                   <Field label="Store #" value={selected.parsed.storeNumber} />
                   <Field label="PO #" value={selected.parsed.purchaseOrderNumber} />
                   <Field label="Customer" value={selected.parsed.customerName} />
@@ -533,7 +540,7 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                       .join(", ")}
                   />
                   <Field label="Our DNE / NTE" value={money(selected.parsed.dneAmount)} />
-                  <Field label="Subcontractor NTE" value={money(subcontractorDneAmount(selected.parsed.dneAmount))} />
+                  <Field label="Subcontractor NTE" value={money(selected.dispatch?.contractorCopy?.subcontractorDne)} />
                   <Field label="Timeframe" value={selected.parsed.timeframe} />
                   <Field label="Priority" value={selected.parsed.priority} />
                   <Field label="Due date" value={selected.parsed.dueDate} />
@@ -614,19 +621,74 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                       <p className="mt-1 text-xs text-slate-500">
                         Draft status: {selected.emailDraft?.status || "none"}
                         {selected.emailDraft?.reviewedAt ? " · reviewed" : ""}
-                        . Contractor copy shows {money(subcontractorDneAmount(selected.parsed.dneAmount))} not-to-exceed.
+                        {crewWorkflow ? ` · Crew limit: ${money(selected.dispatch?.contractorCopy?.subcontractorDne)}` : ""}
                       </p>
                     </div>
-                    <button
+                    {!crewWorkflow ? <button
                       className="rounded-lg border border-[#2b4168] px-3 py-2 text-xs font-black text-slate-200"
                       disabled={isPending}
                       onClick={() => patchSelected({ action: "refresh_email_draft" }, "Email draft refreshed.")}
                       type="button"
                     >
                       Rebuild draft
-                    </button>
+                    </button> : null}
                   </div>
-                  <div className="mt-4 grid gap-2">
+                  {crewWorkflow ? (
+                    <div className="mt-4 grid gap-3">
+                      {selected.dispatch?.status === "pending_review" || selected.dispatch?.status === "assigned" ? (
+                        <form key={selected.id} className="grid gap-2" onSubmit={(event) => {
+                          event.preventDefault();
+                          const data = new FormData(event.currentTarget);
+                          const customerDne = String(data.get("verifiedCustomerDne") || "").trim();
+                          patchSelected({ action: "prepare_dispatch", verifiedCustomerDne: customerDne ? Number(customerDne) : undefined, contractorCopy: {
+                            subcontractorDne: Number(data.get("subcontractorDne")),
+                            scope: String(data.get("scope") ?? ""),
+                            site: String(data.get("site") ?? ""),
+                            schedule: String(data.get("schedule") ?? ""),
+                            customerCleared: data.has("customerCleared"),
+                          } }, "Crew-facing draft saved. Review the exact copy below.");
+                        }}>
+                          <p className="text-xs text-slate-400">Only the fields you enter below go out. Source emails, files, customer cap and private notes stay internal.</p>
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Verified customer DNE (internal only)
+                            <input required type="number" name="verifiedCustomerDne" min="0.01" step="0.01" defaultValue={selected.parsed.dneAmount ?? undefined}
+                              className="rounded-lg bg-[#0c172b] p-2 text-sm text-white" />
+                          </label>
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Subcontractor DNE
+                            <input required type="number" name="subcontractorDne" min="0.01" step="0.01" defaultValue={selected.dispatch.contractorCopy?.subcontractorDne}
+                              className="rounded-lg bg-[#0c172b] p-2 text-sm text-white" />
+                          </label>
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Scope for the crew
+                            <textarea required name="scope" maxLength={2500} defaultValue={selected.dispatch.contractorCopy?.scope}
+                              className="min-h-24 rounded-lg bg-[#0c172b] p-2 text-sm text-white" />
+                          </label>
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Site information to share (optional)
+                            <input name="site" maxLength={500} defaultValue={selected.dispatch.contractorCopy?.site}
+                              className="rounded-lg bg-[#0c172b] p-2 text-sm text-white" />
+                          </label>
+                          <label className="grid gap-1 text-xs text-slate-300">
+                            Schedule to share (optional)
+                            <input name="schedule" maxLength={250} defaultValue={selected.dispatch.contractorCopy?.schedule}
+                              className="rounded-lg bg-[#0c172b] p-2 text-sm text-white" />
+                          </label>
+                          <label className="flex gap-2 pt-1 text-xs text-slate-300">
+                            <input name="customerCleared" type="checkbox" defaultChecked={selected.dispatch.contractorCopy?.customerCleared} />
+                            I verified the customer DNE and that the customer permits this subcontractor on this job.
+                          </label>
+                          <button type="submit" disabled={isPending || Boolean(selected.dispatchHold)}
+                            className="w-fit rounded-lg border border-[#2b4168] px-3 py-2 text-xs font-black text-slate-200">
+                            Build crew-facing draft
+                          </button>
+                        </form>
+                      ) : <p className="text-xs text-slate-400">A matching configured route and current assignment are required before preparing a dispatch.</p>}
+                      {selected.dispatch?.contractorCopy && selected.emailDraft?.body ? (
+                        <pre className="whitespace-pre-wrap rounded-lg bg-[#0c172b] p-3 text-xs leading-5 text-slate-100">{`To: ${selected.emailDraft.to}\nSubject: ${selected.emailDraft.subject}\n\n${selected.emailDraft.body}`}</pre>
+                      ) : null}
+                    </div>
+                  ) : <div className="mt-4 grid gap-2">
                     <input
                       className="rounded-lg border border-[#223758] bg-[#0c172b] px-3 py-2 text-sm text-white"
                       defaultValue={selected.emailDraft?.to || ""}
@@ -659,14 +721,14 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                         })
                       }
                     />
-                  </div>
+                  </div>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-black text-emerald-200"
-                      disabled={isPending}
+                      disabled={isPending || (crewWorkflow && (!selected.dispatch?.contractorCopy?.customerCleared || Boolean(selected.dispatchHold) || selected.dispatch.status === "sent" || selected.dispatch.status === "send_uncertain"))}
                       onClick={() =>
                         patchSelected(
-                          { action: "approve_email" },
+                          { action: "approve_email", reviewedDraftAt: selected.emailDraft?.updatedAt },
                           "Reviewed and approved. Send when the crew, scope, and subcontractor not-to-exceed look right."
                         )
                       }
@@ -677,7 +739,7 @@ export function JobIntakePanel({ initialId }: { initialId?: string }) {
                     </button>
                     <button
                       className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
-                      disabled={isPending || selected.emailDraft?.status !== "approved" || !selected.emailDraft?.reviewedAt}
+                      disabled={isPending || selected.emailDraft?.status !== "approved" || !selected.emailDraft?.reviewedAt || (crewWorkflow && (Boolean(selected.dispatchHold) || selected.dispatch?.status === "send_uncertain"))}
                       onClick={sendEmail}
                       type="button"
                     >

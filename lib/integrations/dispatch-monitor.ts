@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDemoMode } from "../env.ts";
-import { brandedWorkOrderSubject, writeBrandedWorkOrderPdf } from "./branded-work-order.ts";
+import { brandedWorkOrderSubject, buildBrandedWorkOrderText, validateContractorCopy, writeBrandedWorkOrderPdf } from "./branded-work-order.ts";
 import {
   matchContractor,
   toContractorCandidate,
@@ -12,20 +12,21 @@ import {
 } from "./contractor-match.ts";
 
 export type { ContractorCandidate, DispatchRoute } from "./contractor-match.ts";
-import { isImageFile, mergeIntakeFiles, type IntakeFile } from "./intake-files.ts";
+import { isImageFile, type IntakeFile } from "./intake-files.ts";
 import {
   buildDefaultEmailDraft,
   getJobIntakeRecord,
   loadJobIntakeStore,
   updateJobIntakeRecord,
   intakeToWorkOrderDraft,
+  type ContractorCopy,
   type JobDispatch,
   type JobEmailDraft,
   type JobIntakeRecord,
 } from "./job-intake.ts";
-import { approvalStillMatches } from "./dispatch-approval.ts";
+import { approvalStillMatches, stampLoganApproval } from "./dispatch-approval.ts";
 import { withFileLock } from "../file-lock.ts";
-import { formatMoney, redactSubcontractorDne, subcontractorDneAmount } from "./subcontractor-dne.ts";
+import { formatMoney } from "./subcontractor-dne.ts";
 
 export type { JobDispatch };
 export type DispatchStatus = JobDispatch["status"];
@@ -160,7 +161,7 @@ function jobLocation(record: JobIntakeRecord): JobLocation {
   };
 }
 
-function shouldDispatch(record: JobIntakeRecord) {
+export function shouldDispatch(record: JobIntakeRecord) {
   return record.category === "work_order" || record.category === "approved_quote";
 }
 
@@ -206,16 +207,18 @@ async function insertAssignedWorkOrder(record: JobIntakeRecord, dispatch: JobDis
   const draft = intakeToWorkOrderDraft(record);
   const row = {
     ...draft,
-    status: "Scheduled",
+    status: "New",
     source: draft.source === "Email" ? "Email" : "Other",
-    subcontractor_id: dispatch.contractorId,
+    // This is an internal tracker row. Do not grant crew access to its raw
+    // customer record via subcontractor assignment. Crew copy is sent separately.
+    subcontractor_id: null,
     work_order_number: dispatch.fortifiedWorkOrderNumber,
     internal_notes: [
       draft.internal_notes,
       `Fortified WO ${dispatch.fortifiedWorkOrderNumber}`,
       dispatch.contractorName ? `Assigned to ${dispatch.contractorName}` : null,
       record.parsed.dneAmount != null
-        ? `Customer DNE ${formatMoney(record.parsed.dneAmount)}. Subcontractor NTE ${formatMoney(subcontractorDneAmount(record.parsed.dneAmount))}.`
+        ? `Customer DNE ${formatMoney(record.parsed.dneAmount)}. Subcontractor NTE ${formatMoney(dispatch.contractorCopy?.subcontractorDne)}.`
         : null,
       dispatch.reason,
     ]
@@ -273,18 +276,6 @@ async function insertAssignedWorkOrder(record: JobIntakeRecord, dispatch: JobDis
   return persist(client);
 }
 
-async function attachDownloadedFiles(record: JobIntakeRecord) {
-  const pending = (record.files ?? []).filter((file) => file.source === "gmail" && file.attachmentId && !file.localPath);
-  if (!pending.length) return record.files ?? [];
-  try {
-    const { downloadGmailAttachments } = await import("./google.ts");
-    const saved = await downloadGmailAttachments(pending);
-    return mergeIntakeFiles(record.files, saved);
-  } catch {
-    return record.files ?? [];
-  }
-}
-
 async function sendAssignment(input: {
   to: string;
   cc?: string;
@@ -301,16 +292,6 @@ async function sendAssignment(input: {
       filename: path.basename(input.pdfPath),
       mimeType: "application/pdf",
       content: await readFile(input.pdfPath),
-    });
-  }
-  for (const file of input.files) {
-    if (!file.localPath || !isImageFile(file)) continue;
-    if (attachments.length >= 8) break;
-    const { readFile } = await import("node:fs/promises");
-    attachments.push({
-      filename: file.name,
-      mimeType: file.mimeType || "application/octet-stream",
-      content: await readFile(file.localPath),
     });
   }
   return sendApprovedGmailDraft({
@@ -335,238 +316,255 @@ export async function dispatchIncomingWorkOrders(options?: {
   contractors?: ContractorCandidate[];
   routes?: DispatchRoute[];
 }): Promise<DispatchCycleResult> {
-  const store = await loadJobIntakeStore();
-  const routes = options?.routes ?? (await loadDispatchRoutes());
-  const contractors = options?.contractors ?? (await loadContractors());
-  const items: DispatchCycleResult["items"] = [];
-  const assigned = 0;
-  const sent = 0;
-  let pendingReview = 0;
-  let needsContractor = 0;
-  let skipped = 0;
-  const numbers = store.records.map((record) => ({ ...record }));
+  return withFileLock("dispatch-queue", async () => {
+    const store = await loadJobIntakeStore();
+    const routes = options?.routes ?? (await loadDispatchRoutes());
+    const contractors = options?.contractors ?? (await loadContractors());
+    const items: DispatchCycleResult["items"] = [];
+    const assigned = 0;
+    const sent = 0;
+    let pendingReview = 0;
+    let needsContractor = 0;
+    let skipped = 0;
+    const numbers = store.records.map((record) => ({ ...record }));
 
-  for (const record of store.records) {
-    if (!shouldDispatch(record)) {
-      skipped += 1;
-      continue;
-    }
-    const current = record.dispatch;
-    if (current?.status === "sent" || current?.status === "pending_review") {
-      skipped += 1;
-      continue;
-    }
-    if (current?.status === "assigned" && !current.error) {
-      skipped += 1;
-      continue;
-    }
-    if (
-      current?.status === "assigned" &&
-      current.error &&
-      /sample address|has no email/i.test(current.error)
-    ) {
-      skipped += 1;
-      continue;
-    }
+    for (const record of store.records) {
+      if (!shouldDispatch(record) || record.dispatchHold || record.status === "dismissed") {
+        skipped += 1;
+        continue;
+      }
+      const current = record.dispatch;
+      if (current && ["sent", "pending_review", "withdrawn", "send_uncertain"].includes(current.status)) {
+        skipped += 1;
+        continue;
+      }
+      if (current?.status === "assigned" && !current.error) {
+        skipped += 1;
+        continue;
+      }
+      if (
+        current?.status === "assigned" &&
+        current.error &&
+        /sample address|has no email/i.test(current.error)
+      ) {
+        skipped += 1;
+        continue;
+      }
 
-    const files = await attachDownloadedFiles(record);
-    if (files.length) {
-      await updateJobIntakeRecord(record.id, { files, photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name) });
-    }
+      const existingNumber = current?.fortifiedWorkOrderNumber;
+      const match = matchContractor(jobLocation(record), routes, contractors, { routeOnly: true });
+      if (!match) {
+        const where = [record.parsed.city, record.parsed.state].filter(Boolean).join(", ") || "an unknown location";
+        const dispatch: JobDispatch = {
+          status: "needs_contractor",
+          fortifiedWorkOrderNumber: existingNumber,
+          reason: `No predetermined contractor covers ${where}. Add a matching dispatch route for an active subcontractor; conflicting routes must be resolved.`,
+          updatedAt: new Date().toISOString(),
+        };
+        await updateJobIntakeRecord(record.id, { dispatch });
+        needsContractor += 1;
+        items.push({
+          intakeId: record.id,
+          workOrderNumber: record.parsed.workOrderNumber,
+          status: "needs_contractor",
+          detail: dispatch.reason || "",
+        });
+        continue;
+      }
 
-    const existingNumber = current?.fortifiedWorkOrderNumber;
-    const match = matchContractor(jobLocation(record), routes, contractors);
-    if (!match) {
-      const where = [record.parsed.city, record.parsed.state].filter(Boolean).join(", ") || "an unknown location";
+      const fortifiedWorkOrderNumber = existingNumber || nextFortifiedNumber(numbers);
+      numbers.push({
+        ...record,
+        dispatch: { status: "assigned", fortifiedWorkOrderNumber, updatedAt: new Date().toISOString() },
+      });
+
       const dispatch: JobDispatch = {
-        status: "needs_contractor",
-        fortifiedWorkOrderNumber: existingNumber,
-        reason: `No predetermined contractor covers ${where}. Add a dispatch route or set service states on an active subcontractor.`,
+        status: "pending_review",
+        contractorId: match.contractor.id,
+        contractorName: match.contractor.companyName,
+        contractorEmail: match.contractor.email,
+        contractorPhone: match.contractor.phone,
+        reason: `${match.reason} Waiting for review before the crew is assigned or emailed.`,
+        routeId: match.routeId,
+        fortifiedWorkOrderNumber,
         updatedAt: new Date().toISOString(),
       };
-      await updateJobIntakeRecord(record.id, { dispatch, files });
-      needsContractor += 1;
+      pendingReview += 1;
+
+      await updateJobIntakeRecord(record.id, {
+        dispatch,
+        emailDraft: {
+          to: match.contractor.email || "",
+          subject: `Fortified WO ${fortifiedWorkOrderNumber}`,
+          body: "",
+          status: "draft",
+          updatedAt: new Date().toISOString(),
+        },
+      });
+
       items.push({
         intakeId: record.id,
         workOrderNumber: record.parsed.workOrderNumber,
-        status: "needs_contractor",
-        detail: dispatch.reason || "",
+        status: dispatch.status,
+        contractorName: dispatch.contractorName,
+        fortifiedWorkOrderNumber,
+        detail: dispatch.error || dispatch.reason || "",
       });
-      continue;
     }
 
-    const fortifiedWorkOrderNumber = existingNumber || nextFortifiedNumber(numbers);
-    const assignment = {
-      fortifiedWorkOrderNumber,
-      contractorName: match.contractor.companyName,
-      contractorEmail: match.contractor.email,
-      contractorPhone: match.contractor.phone,
-      reason: match.reason,
+    const message = [
+      `Checked ${store.records.length} intake records.`,
+      pendingReview ? `Held ${pendingReview} for review.` : null,
+      assigned ? `Assigned ${assigned}.` : null,
+      sent ? `Sent ${sent} branded work order${sent === 1 ? "" : "s"}.` : null,
+      needsContractor ? `${needsContractor} need a contractor for that location.` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return {
+      ranAt: new Date().toISOString(),
+      synced: false,
+      checked: store.records.length,
+      assigned,
+      sent,
+      pendingReview,
+      needsContractor,
+      skipped,
+      message,
+      items,
     };
-    const written = await writeBrandedWorkOrderPdf({
-      directory: documentsDir(),
-      record: { ...record, files },
-      assignment,
-      files,
-    });
-    numbers.push({
-      ...record,
-      dispatch: { status: "assigned", fortifiedWorkOrderNumber, updatedAt: new Date().toISOString() },
-    });
+  });
+}
 
-    const dispatch: JobDispatch = {
-      status: "pending_review",
-      contractorId: match.contractor.id,
-      contractorName: match.contractor.companyName,
-      contractorEmail: match.contractor.email,
-      contractorPhone: match.contractor.phone,
-      reason: `${match.reason} Waiting for review before the crew is assigned or emailed.`,
-      routeId: match.routeId,
-      fortifiedWorkOrderNumber,
-      documentPath: written.pdfPath,
-      updatedAt: new Date().toISOString(),
-    };
-    pendingReview += 1;
-
-    await updateJobIntakeRecord(record.id, {
-      files,
-      photoUrls: files.map((file) => file.localPath || file.sourceUrl || file.name),
-      dispatch,
-      emailDraft: {
-        to: match.contractor.email || "",
-        subject: brandedWorkOrderSubject(record, assignment),
-        body: written.text,
-        status: "draft",
-        updatedAt: new Date().toISOString(),
-      },
-    });
-
-    items.push({
-      intakeId: record.id,
-      workOrderNumber: record.parsed.workOrderNumber,
-      status: dispatch.status,
-      contractorName: dispatch.contractorName,
-      fortifiedWorkOrderNumber,
-      detail: dispatch.error || dispatch.reason || "",
-    });
+function previewContractorDraft(record: JobIntakeRecord, copy: ContractorCopy) {
+  const dispatch = record.dispatch;
+  if (!dispatch?.routeId || !dispatch.fortifiedWorkOrderNumber || !dispatch.contractorName || !deliverableEmail(dispatch.contractorEmail)) {
+    throw new Error("Choose a predetermined route with an active contractor and a valid email address.");
   }
-
-  const message = [
-    `Checked ${store.records.length} intake records.`,
-    pendingReview ? `Held ${pendingReview} for review.` : null,
-    assigned ? `Assigned ${assigned}.` : null,
-    sent ? `Sent ${sent} branded work order${sent === 1 ? "" : "s"}.` : null,
-    needsContractor ? `${needsContractor} need a contractor for that location.` : null,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return {
-    ranAt: new Date().toISOString(),
-    synced: false,
-    checked: store.records.length,
-    assigned,
-    sent,
-    pendingReview,
-    needsContractor,
-    skipped,
-    message,
-    items,
+  const assignment = {
+    fortifiedWorkOrderNumber: dispatch.fortifiedWorkOrderNumber,
+    contractorName: dispatch.contractorName,
+    contractorEmail: dispatch.contractorEmail,
+    reason: "",
   };
+  const draft: JobEmailDraft = {
+    to: dispatch.contractorEmail!,
+    subject: brandedWorkOrderSubject(assignment),
+    body: buildBrandedWorkOrderText(record, assignment, copy),
+    status: "draft",
+    updatedAt: new Date().toISOString(),
+  };
+  return { assignment, draft };
+}
+
+export async function saveContractorDispatchDraft(
+  id: string,
+  value: Partial<ContractorCopy>,
+  verifiedCustomerDne?: number
+) {
+  return withFileLock(`dispatch-${id}`, async () => {
+    const record = await getJobIntakeRecord(id);
+    if (!record) throw new Error("Not found.");
+    if (record.dispatch?.status !== "pending_review" && record.dispatch?.status !== "assigned") {
+      throw new Error("This job must be held for review with a predetermined contractor.");
+    }
+    if (verifiedCustomerDne !== undefined && (typeof verifiedCustomerDne !== "number" ||
+      !Number.isFinite(verifiedCustomerDne) || verifiedCustomerDne <= 0 ||
+      !Number.isSafeInteger(Math.round(verifiedCustomerDne * 100)) ||
+      Math.abs(Math.round(verifiedCustomerDne * 100) / 100 - verifiedCustomerDne) > 0.000001)) {
+      throw new Error("Enter a valid verified customer DNE in dollars and cents.");
+    }
+    const reviewed = verifiedCustomerDne === undefined ? record : {
+      ...record, parsed: { ...record.parsed, dneAmount: verifiedCustomerDne },
+    };
+    const copy = validateContractorCopy(reviewed, value);
+    const { draft } = previewContractorDraft(reviewed, copy);
+    return updateJobIntakeRecord(id, {
+      parsed: verifiedCustomerDne === undefined ? undefined : reviewed.parsed,
+      dispatch: { ...record.dispatch, contractorCopy: copy, documentPath: undefined, updatedAt: draft.updatedAt },
+      emailDraft: draft,
+    }, { expectedUpdatedAt: record.updatedAt, failOnDispatchHold: true });
+  });
+}
+
+function matchReviewedFields(record: JobIntakeRecord, generated: JobEmailDraft, saved?: JobEmailDraft | null) {
+  if (!saved || saved.cc || saved.to !== generated.to || saved.subject !== generated.subject || saved.body !== generated.body) {
+    throw new Error("Prepare and approve the current crew-facing draft. Free-form or outdated drafts are not dispatchable.");
+  }
+  if (record.dispatch?.status !== "pending_review" && record.dispatch?.status !== "assigned") {
+    throw new Error("This job is not ready to dispatch.");
+  }
+  return saved;
+}
+
+export async function approveContractorDispatch(id: string, reviewedAt: string | undefined) {
+  return withFileLock(`dispatch-${id}`, async () => {
+    const record = await getJobIntakeRecord(id);
+    if (!record) throw new Error("Not found.");
+    const copy = validateContractorCopy(record, record.dispatch?.contractorCopy);
+    if (!copy.customerCleared) throw new Error("Verify and confirm that the customer permits this subcontractor.");
+    const { draft } = previewContractorDraft(record, copy);
+    const saved = matchReviewedFields(record, draft, record.emailDraft);
+    if (saved.updatedAt !== reviewedAt) throw new Error("The draft changed. Review the current draft before approving.");
+    return updateJobIntakeRecord(id, { emailDraft: stampLoganApproval(record, saved) },
+      { expectedUpdatedAt: record.updatedAt, failOnDispatchHold: true });
+  });
 }
 
 export async function releaseReviewedDispatch(
   intakeId: string,
-  options?: {
-    to?: string;
-    cc?: string;
-    subject?: string;
-    body?: string;
-    sendEmail?: (input: OutboundEmail) => Promise<{ id: string }>;
-  }
+  options?: { sendEmail?: (input: OutboundEmail) => Promise<{ id: string }> }
 ) {
   return withFileLock(`dispatch-${intakeId}`, async () => {
-  const record = await getJobIntakeRecord(intakeId);
-  if (!record) throw new Error("Not found.");
-  const current = record.dispatch;
-  if (!current || current.status === "needs_contractor") {
-    throw new Error("This job is not ready to dispatch.");
-  }
-  if (current.status === "sent") {
-    return { record, gmailMessageId: undefined, alreadySent: true };
-  }
+    const record = await getJobIntakeRecord(intakeId);
+    if (!record) throw new Error("Not found.");
+    const current = record.dispatch;
+    if (current?.status === "sent") return { record, gmailMessageId: undefined, alreadySent: true };
+    if (!current || (current.status !== "pending_review" && current.status !== "assigned")) {
+      throw new Error("This job is not ready to dispatch. Do not retry an uncertain send.");
+    }
+    const copy = validateContractorCopy(record, current.contractorCopy);
+    if (!copy.customerCleared) throw new Error("Verify and confirm that the customer permits this subcontractor.");
+    const { assignment, draft } = previewContractorDraft(record, copy);
+    const saved = matchReviewedFields(record, draft, record.emailDraft);
+    if (!approvalStillMatches(record, saved)) throw new Error("Logan must approve this exact dispatch before it is sent.");
 
-  const draft: JobEmailDraft = {
-    ...(record.emailDraft ?? buildDefaultEmailDraft(record)),
-    ...(options?.to ? { to: options.to } : {}),
-    ...(options?.cc ? { cc: options.cc } : {}),
-    ...(options?.subject ? { subject: options.subject } : {}),
-    ...(options?.body ? { body: options.body } : {}),
-  };
-  if (!approvalStillMatches(record, draft)) {
-    throw new Error("Logan must approve this exact dispatch before it is sent.");
-  }
+    // Provider delivery is deliberately disabled in demo/local mode; only the
+    // authenticated owner route can request it in a configured installation.
+    if (!options?.sendEmail) {
+      if (isDemoMode()) throw new Error("Demo mode does not send dispatch email.");
+      const routes = await loadDispatchRoutes();
+      const contractors = await loadContractors();
+      const match = matchContractor(jobLocation(record), routes, contractors, { routeOnly: true });
+      if (!match || match.routeId !== current.routeId || match.contractor.id !== current.contractorId || match.contractor.email !== draft.to) {
+        throw new Error("The live routing rule or contractor changed. Hold this job for review.");
+      }
+    }
 
-  const to = (draft.to || current.contractorEmail || "").trim();
-  if (!to) throw new Error("Draft is missing a recipient.");
-
-  const files = record.files ?? [];
-  let workOrderId = current.workOrderId || record.workOrderId || undefined;
-  if (!workOrderId || workOrderId.startsWith("local-")) {
-    const created = await insertAssignedWorkOrder({ ...record, files }, current);
-    if (!created || created.startsWith("local-")) {
+    // Regenerate from the exact reviewed projection. No provider URLs, source
+    // filenames, raw scope or intake attachments are passed to the mail sender.
+    const written = await writeBrandedWorkOrderPdf({ directory: documentsDir(), record, assignment, copy });
+    const workOrderId = current.workOrderId || record.workOrderId || await insertAssignedWorkOrder(record, current);
+    if (!workOrderId || workOrderId.startsWith("local-")) {
       throw new Error("Work order was not created, so the dispatch was not sent.");
     }
-    workOrderId = created;
-  }
 
-  const outboundBody = redactSubcontractorDne(draft.body, record.parsed.dneAmount);
-  let sentAt: string | undefined;
-  let gmailMessageId: string | undefined;
-  let errorMessage: string | undefined;
-  let status: JobDispatch["status"] = "assigned";
-
-  if (deliverableEmail(to)) {
-    const sender = options?.sendEmail ?? sendAssignment;
-    const result = await sender({
-      to,
-      cc: draft.cc,
-      subject: draft.subject,
-      body: outboundBody,
-      files,
-      pdfPath: current.documentPath,
-    });
-    gmailMessageId = result.id;
-    sentAt = new Date().toISOString();
-    status = "sent";
-  } else if (to) {
-    errorMessage = "Contractor email looks like a sample address, so the work order was assigned without sending.";
-  } else {
-    errorMessage = "This contractor has no email, so the branded work order was assigned without sending.";
-  }
-
-  const updated = await updateJobIntakeRecord(record.id, {
-    status: "tracked",
-    workOrderId,
-    dispatch: {
-      ...current,
-      status,
+    const pending = await updateJobIntakeRecord(intakeId, {
       workOrderId,
-      sentAt,
-      error: errorMessage,
-      updatedAt: new Date().toISOString(),
-    },
-    emailDraft: {
-      ...draft,
-      to,
-      body: outboundBody,
-      status: status === "sent" ? "sent" : "approved",
-      updatedAt: new Date().toISOString(),
-      sentAt,
-    },
-  });
-
-  return { record: updated, gmailMessageId };
+      dispatch: { ...current, status: "send_uncertain", workOrderId, updatedAt: new Date().toISOString() },
+    }, { expectedUpdatedAt: record.updatedAt, failOnDispatchHold: true });
+    const sender = options?.sendEmail ?? sendAssignment;
+    const result = await sender({ to: draft.to, subject: draft.subject, body: draft.body, files: [], pdfPath: written.pdfPath });
+    const sentAt = new Date().toISOString();
+    const latest = await getJobIntakeRecord(intakeId);
+    const updated = await updateJobIntakeRecord(intakeId, {
+      status: "tracked",
+      workOrderId,
+      dispatch: { ...pending.dispatch!, status: latest?.dispatchHold ? "withdrawn" : "sent", documentPath: written.pdfPath, sentAt, updatedAt: sentAt },
+      emailDraft: { ...saved, status: "sent", updatedAt: sentAt, sentAt },
+    });
+    return { record: updated, gmailMessageId: result.id };
   });
 }
 
@@ -580,46 +578,33 @@ export async function sendReviewedJobIntakeEmail(input: {
 }) {
   const record = await getJobIntakeRecord(input.id);
   if (!record) throw new Error("Not found.");
-  const waiting =
-    record.dispatch && (record.dispatch.status === "pending_review" || record.dispatch.status === "assigned");
-  if (waiting) {
+  if (record.dispatch || shouldDispatch(record) || record.dispatchHold) {
+    if (input.to !== undefined || input.cc !== undefined || input.subject !== undefined || input.body !== undefined) {
+      throw new Error("The reviewed contractor copy cannot be overridden at send time.");
+    }
     return releaseReviewedDispatch(input.id, input);
   }
-
-  const draft: JobEmailDraft = {
-    ...(record.emailDraft ?? buildDefaultEmailDraft(record)),
-    ...(input.to ? { to: input.to } : {}),
-    ...(input.cc ? { cc: input.cc } : {}),
-    ...(input.subject ? { subject: input.subject } : {}),
-    ...(input.body ? { body: input.body } : {}),
-  };
-  if (!draft.to?.trim()) throw new Error("Draft is missing a recipient.");
-  if (!approvalStillMatches(record, draft)) {
-    throw new Error("Logan must approve this exact dispatch before it is sent.");
-  }
-
-  const contractorEmail = record.dispatch?.contractorEmail?.trim().toLowerCase();
-  const body =
-    contractorEmail && draft.to.trim().toLowerCase() === contractorEmail
-      ? redactSubcontractorDne(draft.body, record.parsed.dneAmount)
-      : draft.body;
-  const { sendApprovedGmailDraft } = await import("./google.ts");
-  const sent = await sendApprovedGmailDraft({
-    to: draft.to,
-    cc: draft.cc,
-    subject: draft.subject,
-    body,
+  if (isDemoMode()) throw new Error("Demo mode does not send email.");
+  return withFileLock(`email-${input.id}`, async () => {
+    const fresh = await getJobIntakeRecord(input.id);
+    if (!fresh) throw new Error("Not found.");
+    if (fresh.dispatch || shouldDispatch(fresh) || fresh.dispatchHold) throw new Error("Use the reviewed contractor dispatch.");
+    if (fresh.emailDraft?.status === "sent") return { record: fresh, gmailMessageId: undefined };
+    const draft: JobEmailDraft = {
+      ...(fresh.emailDraft ?? buildDefaultEmailDraft(fresh)),
+      ...(input.to ? { to: input.to } : {}),
+      ...(input.cc ? { cc: input.cc } : {}),
+      ...(input.subject ? { subject: input.subject } : {}),
+      ...(input.body ? { body: input.body } : {}),
+    };
+    if (!draft.to?.trim()) throw new Error("Draft is missing a recipient.");
+    if (!approvalStillMatches(fresh, draft)) throw new Error("Logan must approve this exact email before it is sent.");
+    const { sendApprovedGmailDraft } = await import("./google.ts");
+    const sent = await sendApprovedGmailDraft({ to: draft.to, cc: draft.cc, subject: draft.subject, body: draft.body });
+    const sentAt = new Date().toISOString();
+    const updated = await updateJobIntakeRecord(input.id, { emailDraft: { ...draft, status: "sent", updatedAt: sentAt, sentAt } });
+    return { record: updated, gmailMessageId: sent.id as string | undefined };
   });
-  const updated = await updateJobIntakeRecord(input.id, {
-    emailDraft: {
-      ...draft,
-      body,
-      status: "sent",
-      updatedAt: new Date().toISOString(),
-      sentAt: new Date().toISOString(),
-    },
-  });
-  return { record: updated, gmailMessageId: sent.id as string | undefined };
 }
 
 let cyclePromise: Promise<DispatchCycleResult> | null = null;
