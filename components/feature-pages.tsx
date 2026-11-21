@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { isDemoMode, isSupabaseConfigured } from "../lib/env";
 import {
   CheckCircle2,
   Plus,
@@ -12,7 +14,7 @@ import { WebsiteExtractorPanel } from "./website-extractor-panel";
 import { FenceBiblePanel } from "./fence-bible-panel";
 import { displayValue, formatDate, money, type PlainRow } from "../lib/business";
 import { featurePageMap, moduleMap } from "../lib/schema";
-import { fetchDocumentLibrary, fetchInvoiceSummary, fetchModulePage, fetchModuleRows, fetchPlannerColumns } from "../lib/data";
+import { fetchCrewMapPerformance, fetchDocumentLibrary, fetchInvoiceSummary, fetchModulePage, fetchModuleRows, fetchPlannerColumns, getSessionContext } from "../lib/data";
 import { listNotes } from "../lib/notepad-store";
 import { DocumentsWorkspace } from "./documents-workspace";
 import { NotepadWorkspace } from "./notepad-workspace";
@@ -115,15 +117,23 @@ function EmailInboxPage({ googleMessage }: { googleMessage?: string }) {
 }
 
 async function SubcontractorMapPage() {
+  if (isSupabaseConfigured() && !isDemoMode()) {
+    const { user, profile } = await getSessionContext();
+    if (!user) redirect("/login");
+    if (!["owner", "admin", "dispatcher"].includes(String(profile?.role))) {
+      return <ErrorNotice message="The crew coverage map is available to Fortified staff only." />;
+    }
+  }
   const [{ data: subs, error }, { data: jobs, error: jobError }] = await Promise.all([
     fetchModuleRows(moduleMap.subcontractors),
-    fetchModuleRows(moduleMap["work-orders"]),
+    fetchModuleRows({ ...moduleMap["work-orders"], select: "*, customers(company_name), locations(*)" }),
   ]);
+  const performance = await fetchCrewMapPerformance(jobs);
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
       <ToolHeader
         title="Subcontractor Map"
-        description="Real street map of crew coverage and open job sites. Click a crew to open their card, then review a dispatch before it is assigned."
+        description="Find crews for an open job using recorded coverage. Select a job on the map or in the list, then review your options before assigning."
         action={
           <Link className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white" href="/subcontractors/new">
             <Plus className="mr-2 inline size-4" />
@@ -132,7 +142,13 @@ async function SubcontractorMapPage() {
         }
       />
       <ErrorNotice message={error ?? jobError} />
-      <SubcontractorMapPanel subcontractors={toSubcontractorPins(subs)} workOrders={toWorkOrderPins(jobs)} />
+      <SubcontractorMapPanel
+        subcontractors={toSubcontractorPins(subs)}
+        workOrders={toWorkOrderPins(jobs)}
+        performance={performance.evidence}
+        costsAvailable={performance.costsAvailable}
+        historyAvailable={!jobError && isSupabaseConfigured() && !isDemoMode()}
+      />
     </div>
   );
 }

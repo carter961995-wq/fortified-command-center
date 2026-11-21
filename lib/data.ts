@@ -1,4 +1,5 @@
 import { businessToday, calculateProfit, calendarDate, endOfBusinessWeek, startOfBusinessWeek, type PlainRow } from "./business";
+import { summarizeCrewMapPerformance, type CrewMapPerformance } from "./subcontractor-map-performance";
 import { moduleMap, modules, type ModuleDefinition } from "./schema";
 import { createSupabaseServerClient } from "./supabase/server";
 
@@ -311,6 +312,28 @@ async function eachPage(supabase: any, table: string, columns: string, apply: (q
     rows.forEach(visit);
     if (rows.length < size) break;
     from += size;
+  }
+}
+
+export async function fetchCrewMapPerformance(jobs: PlainRow[]) {
+  const summaryFrom = (costs: PlainRow[]) => summarizeCrewMapPerformance(jobs, costs);
+  const { supabase, user, profile } = await getSessionContext();
+  if (!supabase || !user || !["owner", "admin", "dispatcher"].includes(String(profile?.role))) {
+    return { evidence: {} as CrewMapPerformance, costsAvailable: false };
+  }
+  try {
+    const costs: PlainRow[] = [];
+    await eachPage(
+      supabase,
+      "job_costs",
+      "id, work_order_id, subcontractor_id, cost_type, amount, paid, receipt_url",
+      (query) => query.eq("paid", true).eq("cost_type", "subcontractor").not("receipt_url", "is", null),
+      (row) => costs.push(row)
+    );
+    return { evidence: summaryFrom(costs), costsAvailable: true };
+  } catch {
+    // Legacy schemas cannot safely join contractor payments by identity. Keep the job dates.
+    return { evidence: summaryFrom([]), costsAvailable: false };
   }
 }
 
