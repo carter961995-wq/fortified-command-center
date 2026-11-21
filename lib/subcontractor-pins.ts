@@ -1,4 +1,5 @@
-import { resolveCoordinates } from "../src/lib/subcontractors/geo";
+import { normalizeStateCode, resolveCoordinates } from "../src/lib/subcontractors/geo";
+import { hasRecordedMapCoordinates, recordedServiceRadius } from "./subcontractor-map-coverage";
 import type { PlainRow } from "./business";
 
 export type SubcontractorMapPin = {
@@ -13,11 +14,12 @@ export type SubcontractorMapPin = {
   lng: number;
   trades: string[];
   serviceStates: string[];
-  serviceRadius: number;
+  serviceRadius: number | null;
+  hasRecordedCoordinates: boolean;
+  recordedState: string;
   status: string;
   preferred: boolean;
   notes: string;
-  qualityScore: number | null;
   href: string;
 };
 
@@ -34,6 +36,8 @@ export type WorkOrderMapPin = {
   state: string;
   lat: number;
   lng: number;
+  hasRecordedCoordinates: boolean;
+  recordedState: string;
   subcontractorId: string | null;
   href: string;
 };
@@ -63,18 +67,14 @@ function asStringList(value: unknown) {
   return [] as string[];
 }
 
-function asNumber(value: unknown) {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : null;
-}
-
 export function toSubcontractorPins(rows: PlainRow[]): SubcontractorMapPin[] {
   return rows.flatMap((row) => {
+    const hasRecordedCoordinates = hasRecordedMapCoordinates(row.service_latitude, row.service_longitude);
     const coords = resolveCoordinates({
       city: asString(row.city),
       state: asString(row.state) || asStringList(row.service_states)[0],
-      lat: row.service_latitude as number | null,
-      lng: row.service_longitude as number | null,
+      lat: hasRecordedCoordinates ? row.service_latitude as number : undefined,
+      lng: hasRecordedCoordinates ? row.service_longitude as number : undefined,
     });
     if (!coords) return [];
 
@@ -90,12 +90,13 @@ export function toSubcontractorPins(rows: PlainRow[]): SubcontractorMapPin[] {
         lat: coords.lat,
         lng: coords.lng,
         trades: asStringList(row.trades),
-        serviceStates: asStringList(row.service_states),
-        serviceRadius: Math.max(25, asNumber(row.service_radius_miles) ?? 75),
-        status: asString(row.status, "active"),
+        serviceStates: asStringList(row.service_states).map(normalizeStateCode).filter(Boolean),
+        serviceRadius: recordedServiceRadius(row.service_radius_miles),
+        hasRecordedCoordinates,
+        recordedState: normalizeStateCode(asString(row.state)),
+        status: asString(row.status, "unknown"),
         preferred: Boolean(row.preferred_vendor ?? row.is_preferred),
         notes: asString(row.notes),
-        qualityScore: asNumber(row.quality_score),
         href: `/subcontractors/${asString(row.id)}`,
       },
     ];
@@ -106,11 +107,12 @@ export function toWorkOrderPins(rows: PlainRow[]): WorkOrderMapPin[] {
   return rows.flatMap((row) => {
     const location = asRecord(row.locations) ?? asRecord(row.location);
     const customer = asRecord(row.customers) ?? asRecord(row.customer);
+    const hasRecordedCoordinates = hasRecordedMapCoordinates(location?.latitude, location?.longitude);
     const coords = resolveCoordinates({
       city: asString(location?.city),
       state: asString(location?.state),
-      lat: location?.latitude as number | null,
-      lng: location?.longitude as number | null,
+      lat: hasRecordedCoordinates ? location?.latitude as number : undefined,
+      lng: hasRecordedCoordinates ? location?.longitude as number : undefined,
     });
     if (!coords) return [];
 
@@ -131,6 +133,8 @@ export function toWorkOrderPins(rows: PlainRow[]): WorkOrderMapPin[] {
         state: coords.state,
         lat: coords.lat,
         lng: coords.lng,
+        hasRecordedCoordinates,
+        recordedState: normalizeStateCode(asString(location?.state)),
         subcontractorId: row.subcontractor_id ? asString(row.subcontractor_id) : null,
         href: `/work-orders/${asString(row.id)}`,
       },

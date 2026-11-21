@@ -18,7 +18,7 @@ function statusColor(status: string) {
   const value = status.toLowerCase();
   if (value === "blocked") return "#ef4444";
   if (value === "probation" || value === "inactive") return "#f59e0b";
-  return "#10b981";
+  return value === "active" ? "#10b981" : "#64748b";
 }
 
 function pinViewKey(subPins: SubcontractorMapPin[], jobPins: WorkOrderMapPin[]) {
@@ -96,6 +96,7 @@ export default function SubcontractorMapLeaflet({
   subcontractors,
   workOrders,
   selectedId,
+  selectedJobId,
   satellite,
   onSelectSubcontractor,
   onSelectWorkOrder,
@@ -103,6 +104,7 @@ export default function SubcontractorMapLeaflet({
   subcontractors: SubcontractorMapPin[];
   workOrders: WorkOrderMapPin[];
   selectedId?: string;
+  selectedJobId?: string;
   satellite: boolean;
   onSelectSubcontractor: (pin: SubcontractorMapPin) => void;
   onSelectWorkOrder: (pin: WorkOrderMapPin) => void;
@@ -140,7 +142,7 @@ export default function SubcontractorMapLeaflet({
         const color = selected ? "#38bdf8" : statusColor(pin.status);
         return (
           <Fragment key={pin.id}>
-            <Circle
+            {pin.hasRecordedCoordinates && pin.serviceRadius !== null ? <Circle
               center={[pin.lat, pin.lng]}
               radius={milesToMeters(pin.serviceRadius)}
               pathOptions={{
@@ -149,14 +151,14 @@ export default function SubcontractorMapLeaflet({
                 fillOpacity: selected ? 0.16 : 0.08,
                 weight: selected ? 2 : 1,
               }}
-            />
+            /> : null}
             <CircleMarker
               center={[pin.lat, pin.lng]}
               radius={selected ? 11 : 8}
               eventHandlers={{ click: () => onSelectSubcontractor(pin) }}
               pathOptions={{
                 color: "#ffffff",
-                fillColor: pin.preferred ? "#f97316" : color,
+                fillColor: color,
                 fillOpacity: 1,
                 weight: 2,
               }}
@@ -165,7 +167,7 @@ export default function SubcontractorMapLeaflet({
                 <div className="min-w-52 space-y-1 text-slate-900">
                   <p className="text-sm font-black">{pin.companyName}</p>
                   <p className="text-xs">
-                    {pin.city}, {pin.state} · {pin.serviceRadius} mi radius
+                    {pin.city}, {pin.state}{pin.serviceRadius !== null ? ` · ${pin.serviceRadius} mi listed radius` : ""}
                   </p>
                   <p className="text-xs">{pin.trades.join(", ") || "Trade TBD"}</p>
                   <button
@@ -186,11 +188,11 @@ export default function SubcontractorMapLeaflet({
         <CircleMarker
           key={pin.id}
           center={[pin.lat, pin.lng]}
-          radius={6}
+          radius={pin.id === selectedJobId ? 10 : 6}
           eventHandlers={{ click: () => onSelectWorkOrder(pin) }}
           pathOptions={{
             color: "#ffffff",
-            fillColor: pin.subcontractorId ? "#38bdf8" : "#f97316",
+            fillColor: pin.id === selectedJobId ? "#a78bfa" : pin.subcontractorId ? "#38bdf8" : "#f97316",
             fillOpacity: 1,
             weight: 2,
           }}
@@ -205,6 +207,7 @@ export default function SubcontractorMapLeaflet({
               <p className="text-xs">
                 {pin.city}, {pin.state} · {pin.status}
               </p>
+              <button type="button" className="mt-2 w-full rounded bg-slate-950 px-2 py-1 text-xs font-bold text-white" onClick={() => onSelectWorkOrder(pin)}>Show coverage matches</button>
             </div>
           </Popup>
         </CircleMarker>

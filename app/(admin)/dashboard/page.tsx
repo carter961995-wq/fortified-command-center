@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BriefcaseBusiness, CalendarDays, ClipboardPlus, DollarSign, Hammer, Inbox, Plug, RadioTower, Workflow } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, ClipboardPlus, DollarSign, Hammer, Inbox, Map, Plug, RadioTower, Workflow } from "lucide-react";
 import { Badge, ErrorNotice } from "../../../components/ui";
 import { displayValue, formatDate, money } from "../../../lib/business";
 import { fetchDashboardMetrics } from "../../../lib/data";
@@ -115,6 +115,10 @@ export default async function DashboardPage() {
           <Link className="app-btn app-btn-secondary inline-flex items-center gap-2 rounded-lg border border-slate-500 bg-[#13233f] px-4 py-2 text-sm font-black text-white hover:border-orange-300" href="/job-intake">
             <Inbox className="size-4" />
             Job Intake
+          </Link>
+          <Link className="app-btn app-btn-secondary inline-flex items-center gap-2 rounded-lg border border-slate-500 bg-[#13233f] px-4 py-2 text-sm font-black text-white hover:border-orange-300" href="/subcontractor-map">
+            <Map className="size-4" />
+            Crew coverage map
           </Link>
           <Link className="app-btn app-btn-secondary inline-flex items-center gap-2 rounded-lg border border-slate-500 bg-[#13233f] px-4 py-2 text-sm font-black text-white hover:border-orange-300" href="/job-sources">
             <Plug className="size-4" />
